@@ -16,6 +16,18 @@ function toPersianNumbers(str) {
   return str.replace(/[0-9]/g, (digit) => persianNumbers[digit]);
 }
 
+// Function to format numbers with commas (Persian format)
+function formatNumberWithCommas(number) {
+  // Split the number to add commas for thousands
+  const numberString = number.toString();
+  const parts = numberString.split('.');
+  const integerPart = parts[0];
+  const decimalPart = parts[1];
+
+  const integerWithCommas = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '،');
+  return decimalPart ? `${integerWithCommas}.${decimalPart}` : integerWithCommas;
+}
+
 // Function to format the date and convert its numerals to Persian
 function formatPersianDate(dateString) {
   const date = new Date(dateString); // Convert to Date object
@@ -61,8 +73,8 @@ bot.onText(/\/usd/, async (msg) => {
     const { usdBuyValue, usdBuyChange, usdBuyDate } = rateData;
 
     // Convert numbers to Persian
-    const persianUsdBuyValue = toPersianNumbers(usdBuyValue.toString());
-    const persianUsdBuyChange = toPersianNumbers(usdBuyChange.toString());
+    const persianUsdBuyValue = toPersianNumbers(formatNumberWithCommas(usdBuyValue.toString()));
+    const persianUsdBuyChange = toPersianNumbers(formatNumberWithCommas(usdBuyChange.toString()));
     const persianUsdBuyDate = formatPersianDate(usdBuyDate); // Format and convert date to Persian numerals
 
     // Prepare the message to send with bold formatting and Persian numerals
