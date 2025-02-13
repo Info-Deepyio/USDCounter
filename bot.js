@@ -2,43 +2,43 @@ const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const moment = require('moment');
 
-// توکن ربات خود را از BotFather قرار دهید
+// Token provided by you
 const token = '7971393473:AAHhxpn9m-KwN9VrKaVU426_e1gNjIgFJjU';
 
-// ایجاد یک نمونه جدید از ربات تلگرام
+// Create a new Telegram bot instance
 const bot = new TelegramBot(token, { polling: true });
 
-// تابعی برای گرفتن نرخ تبدیل دلار به تومان
+// Function to fetch USD to Toman conversion rates
 async function fetchExchangeRates() {
   try {
-    // جایگزینی با نقطه پایانی مناسب برای گرفتن نرخ دلار به تومان
+    // Replace with the appropriate API endpoint for USD to Toman rates
     const response = await axios.get('https://api.exchangerate-api.com/v4/latest/USD');
-    const usdToToman = response.data.rates.IRR / 10; // IRR ریال ایرانی است و تقسیم بر ۱۰ برای گرفتن تومان
+    const usdToToman = response.data.rates.IRR / 10; // IRR is Iranian Rial, divided by 10 to get Toman
     return usdToToman;
   } catch (error) {
-    console.error('خطا در دریافت نرخ‌ها:', error);
+    console.error('Error fetching exchange rates:', error);
     return null;
   }
 }
 
-// تابعی برای گرفتن نرخ دلار به تومان روز گذشته
+// Function to fetch yesterday's USD to Toman rate
 async function fetchYesterdayExchangeRate() {
   try {
     const yesterday = moment().subtract(1, 'days').format('YYYY-MM-DD');
     const response = await axios.get(`https://api.exchangerate-api.com/v4/${yesterday}/USD`);
-    const usdToTomanYesterday = response.data.rates.IRR / 10; // IRR ریال ایرانی است و تقسیم بر ۱۰ برای گرفتن تومان
+    const usdToTomanYesterday = response.data.rates.IRR / 10; // IRR is Iranian Rial, divided by 10 to get Toman
     return usdToTomanYesterday;
   } catch (error) {
-    console.error('خطا در دریافت نرخ‌های روز گذشته:', error);
+    console.error('Error fetching yesterday\'s exchange rates:', error);
     return null;
   }
 }
 
-// هنگامی که کاربر دستور "/usd" را وارد می‌کند
+// Command handler when the user types "/usd"
 bot.onText(/\/usd/, async (msg) => {
   const chatId = msg.chat.id;
 
-  // دریافت نرخ تبدیل امروز و دیروز
+  // Fetch today's and yesterday's exchange rates
   const todayRate = await fetchExchangeRates();
   const yesterdayRate = await fetchYesterdayExchangeRate();
 
@@ -58,4 +58,4 @@ bot.onText(/\/usd/, async (msg) => {
   }
 });
 
-console.log('ربات در حال اجرا است...');
+console.log('Bot is running...');
