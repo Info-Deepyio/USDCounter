@@ -62,6 +62,25 @@ async function fetchUsdRate() {
   }
 }
 
+// Function to fetch yesterday's value
+async function fetchYesterdayUsdRate() {
+  try {
+    const response = await axios.get(`${apiUrl}?date=yesterday`);
+
+    if (response.data && response.data['usd_buy']) {
+      const usdBuyValue = response.data['usd_buy'].value;
+
+      return usdBuyValue;
+    } else {
+      console.error('usd_buy data for yesterday not found in the response');
+      return null;
+    }
+  } catch (error) {
+    console.error('Error fetching yesterday\'s USD rate:', error.response ? error.response.data : error.message);
+    return null;
+  }
+}
+
 // Command handler when the user types "/usd"
 bot.onText(/\/usd/, async (msg) => {
   const chatId = msg.chat.id;
@@ -72,20 +91,33 @@ bot.onText(/\/usd/, async (msg) => {
   if (rateData) {
     const { usdBuyValue, usdBuyChange, usdBuyDate } = rateData;
 
-    // Convert numbers to Persian
-    const persianUsdBuyValue = toPersianNumbers(formatNumberWithCommas(usdBuyValue.toString()));
-    const persianUsdBuyChange = toPersianNumbers(formatNumberWithCommas(usdBuyChange.toString()));
-    const persianUsdBuyDate = formatPersianDate(usdBuyDate); // Format and convert date to Persian numerals
+    // Fetch yesterday's USD buy rate for comparison
+    const yesterdayUsdBuyValue = await fetchYesterdayUsdRate();
 
-    // Prepare the message to send with bold formatting and Persian numerals
-    const responseMessage = `
+    if (yesterdayUsdBuyValue !== null) {
+      const persianUsdBuyValue = toPersianNumbers(formatNumberWithCommas(usdBuyValue.toString()));
+      const persianUsdBuyChange = toPersianNumbers(formatNumberWithCommas(usdBuyChange.toString()));
+      const persianYesterdayUsdBuyValue = toPersianNumbers(formatNumberWithCommas(yesterdayUsdBuyValue.toString()));
+
+      // Calculate the change between today and yesterday
+      const changeFromYesterday = usdBuyValue - yesterdayUsdBuyValue;
+      const persianChangeFromYesterday = toPersianNumbers(formatNumberWithCommas(changeFromYesterday.toString()));
+
+      // Format the date properly in Persian numerals
+      const persianUsdBuyDate = formatPersianDate(usdBuyDate); // Format and convert date to Persian numerals
+
+      // Prepare the message to send with bold formatting and Persian numerals
+      const responseMessage = `
 ⚡️ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
-📈 **تغییرات نسبت به روز قبل**: *${persianUsdBuyChange} تومان*
+📈 **نسبت تغییرات به دیروز**: *${persianChangeFromYesterday} تومان*
 📅 **تاریخ**: *${persianUsdBuyDate}*
     `;
-    
-    // Send the response message to the user
-    bot.sendMessage(chatId, responseMessage, { parse_mode: 'Markdown' });
+      
+      // Send the response message to the user
+      bot.sendMessage(chatId, responseMessage, { parse_mode: 'Markdown' });
+    } else {
+      bot.sendMessage(chatId, '❌ خطا در دریافت نرخ دیروز، لطفاً بعداً امتحان کنید.');
+    }
   } else {
     bot.sendMessage(chatId, '❌ خطا در دریافت نرخ‌ها، لطفاً بعداً امتحان کنید.');
     console.error('Error fetching rates');
