@@ -27,11 +27,13 @@ function formatNumberWithCommas(number) {
   return decimalPart ? `${integerWithCommas}.${decimalPart}` : integerWithCommas;
 }
 
-// Function to format the date and convert its numerals to Persian
-function formatPersianDate(dateString) {
-  const date = new Date(dateString); 
-  const formattedDate = date.toISOString().replace('T', ' ').slice(0, 19); 
-  return toPersianNumbers(formattedDate);
+// Function to format the date and time
+function formatPersianDateAndTime(dateString) {
+  const [datePart, timePart] = dateString.split(' ');
+  const formattedDate = toPersianNumbers(datePart); // Convert date to Persian
+  const formattedTime = toPersianNumbers(timePart); // Convert time to Persian
+
+  return { formattedDate, formattedTime };
 }
 
 // Function to fetch the USD buy rate and its change
@@ -77,15 +79,16 @@ bot.onText(/\/usd/, async (msg) => {
     const persianUsdBuyChange = toPersianNumbers(formatNumberWithCommas(usdBuyChange.toString()));
     const persianYesterdayUsdBuyValue = toPersianNumbers(formatNumberWithCommas(yesterdayUsdBuyValue.toString()));
 
-    // Format the date properly in Persian numerals
-    const persianUsdBuyDate = formatPersianDate(usdBuyDate); 
+    // Extract and format date and time from the API response
+    const { formattedDate, formattedTime } = formatPersianDateAndTime(usdBuyDate); 
 
     // Prepare the message to send with bold formatting and Persian numerals
     const responseMessage = `
 \u200F⚡️ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
 📉 **نرخ دلار دیروز**: *${persianYesterdayUsdBuyValue} تومان*
 📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان افزایش*
-📅 **تاریخ**: *${persianUsdBuyDate}*
+📅 **تاریخ**: *${formattedDate}*
+⏰ **زمان**: *${formattedTime} ساعت*
     `;
       
     // Send the response message to the user
