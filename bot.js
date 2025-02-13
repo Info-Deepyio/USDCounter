@@ -16,6 +16,13 @@ function toPersianNumbers(str) {
   return str.replace(/[0-9]/g, (digit) => persianNumbers[digit]);
 }
 
+// Function to format the date and convert its numerals to Persian
+function formatPersianDate(dateString) {
+  const date = new Date(dateString); // Convert to Date object
+  const formattedDate = date.toISOString().replace('T', ' ').slice(0, 19); // Get YYYY-MM-DD HH:MM:SS
+  return toPersianNumbers(formattedDate); // Convert all numbers in the date to Persian
+}
+
 // Function to fetch the USD buy rate and its change
 async function fetchUsdRate() {
   try {
@@ -56,7 +63,7 @@ bot.onText(/\/usd/, async (msg) => {
     // Convert numbers to Persian
     const persianUsdBuyValue = toPersianNumbers(usdBuyValue.toString());
     const persianUsdBuyChange = toPersianNumbers(usdBuyChange.toString());
-    const persianUsdBuyDate = toPersianNumbers(usdBuyDate);
+    const persianUsdBuyDate = formatPersianDate(usdBuyDate); // Format and convert date to Persian numerals
 
     // Prepare the message to send with bold formatting and Persian numerals
     const responseMessage = `
