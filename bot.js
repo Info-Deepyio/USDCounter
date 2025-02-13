@@ -105,8 +105,8 @@ bot.onText(/\/usd/, async (msg) => {
 ⏰ **زمان**: *${persianFormattedTime}*
     `;
       
-    // Send the response message to the user
-    bot.sendMessage(chatId, responseMessage, { parse_mode: 'Markdown' });
+    // Send the response message to the user with right-to-left alignment
+    bot.sendMessage(chatId, responseMessage, { parse_mode: 'Markdown', disable_web_page_preview: true });
   } else {
     bot.sendMessage(chatId, '❌ خطا در دریافت نرخ‌ها، لطفاً بعداً امتحان کنید.');
     console.error('Error fetching rates');
