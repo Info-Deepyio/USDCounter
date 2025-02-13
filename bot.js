@@ -69,19 +69,13 @@ bot.onText(/\/usd/, async (msg) => {
   if (rateData) {
     const { usdBuyValue, usdBuyChange, usdBuyDate } = rateData;
 
-    // Save yesterday's value (manually set as the difference between today’s and yesterday’s values)
-    const yesterdayUsdBuyValue = 89450; // Example, replace with yesterday's rate value manually.
-
-    // Calculate the difference between today’s value and yesterday’s value
-    const changeFromYesterday = usdBuyValue - yesterdayUsdBuyValue;
+    // Calculate yesterday's value by subtracting change from today's value
+    const yesterdayUsdBuyValue = usdBuyValue - usdBuyChange;
 
     // Convert numbers to Persian
     const persianUsdBuyValue = toPersianNumbers(formatNumberWithCommas(usdBuyValue.toString()));
     const persianUsdBuyChange = toPersianNumbers(formatNumberWithCommas(usdBuyChange.toString()));
     const persianYesterdayUsdBuyValue = toPersianNumbers(formatNumberWithCommas(yesterdayUsdBuyValue.toString()));
-
-    // Calculate the change from yesterday in Persian format
-    const persianChangeFromYesterday = toPersianNumbers(formatNumberWithCommas(changeFromYesterday.toString()));
 
     // Format the date properly in Persian numerals
     const persianUsdBuyDate = formatPersianDate(usdBuyDate); 
@@ -89,7 +83,8 @@ bot.onText(/\/usd/, async (msg) => {
     // Prepare the message to send with bold formatting and Persian numerals
     const responseMessage = `
 ⚡️ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
-📈 **نسبت تغییرات به دیروز**: *${persianChangeFromYesterday} تومان*
+📉 **نرخ دلار دیروز**: *${persianYesterdayUsdBuyValue} تومان*
+📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان*
 📅 **تاریخ**: *${persianUsdBuyDate}*
     `;
       
