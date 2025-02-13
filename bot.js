@@ -98,7 +98,7 @@ bot.onText(/\/usd/, async (msg) => {
 
 📉 **نرخ دلار دیروز**: *${persianYesterdayUsdBuyValue} تومان*
 
-📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان ${changeText}*
+📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان (${changeText})*
 
 📅 **تاریخ**: *${persianFormattedDate}*
 
