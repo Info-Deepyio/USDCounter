@@ -82,9 +82,9 @@ bot.onText(/\/usd/, async (msg) => {
 
     // Prepare the message to send with bold formatting and Persian numerals
     const responseMessage = `
-⚡️ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
+\u200F⚡️ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
 📉 **نرخ دلار دیروز**: *${persianYesterdayUsdBuyValue} تومان*
-📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان*
+📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان افزایش*
 📅 **تاریخ**: *${persianUsdBuyDate}*
     `;
       
