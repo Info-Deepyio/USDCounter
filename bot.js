@@ -10,6 +10,12 @@ const apiUrl = 'https://api.navasan.tech/latest/?api_key=free7HKJj4k6FRl8XQb18vT
 // Create a new Telegram bot instance
 const bot = new TelegramBot(token, { polling: true });
 
+// Function to convert English numbers to Persian numbers
+function toPersianNumbers(str) {
+  const persianNumbers = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  return str.replace(/[0-9]/g, (digit) => persianNumbers[digit]);
+}
+
 // Function to fetch the USD buy rate and its change
 async function fetchUsdRate() {
   try {
@@ -21,13 +27,11 @@ async function fetchUsdRate() {
       const usdBuyValue = response.data['usd_buy'].value;
       const usdBuyChange = response.data['usd_buy'].change;
       const usdBuyDate = response.data['usd_buy'].date;
-      const yesterdayValue = response.data['usd_buy'].yesterday_value || "No data"; // Handle if no yesterday data is provided
 
       return {
         usdBuyValue,
         usdBuyChange,
         usdBuyDate,
-        yesterdayValue,
       };
     } else {
       console.error('usd_buy data not found in the response');
@@ -47,14 +51,18 @@ bot.onText(/\/usd/, async (msg) => {
   const rateData = await fetchUsdRate();
 
   if (rateData) {
-    const { usdBuyValue, usdBuyChange, usdBuyDate, yesterdayValue } = rateData;
+    const { usdBuyValue, usdBuyChange, usdBuyDate } = rateData;
 
-    // Prepare the message to send with bold formatting and added yesterday price
+    // Convert numbers to Persian
+    const persianUsdBuyValue = toPersianNumbers(usdBuyValue.toString());
+    const persianUsdBuyChange = toPersianNumbers(usdBuyChange.toString());
+    const persianUsdBuyDate = toPersianNumbers(usdBuyDate);
+
+    // Prepare the message to send with bold formatting and Persian numerals
     const responseMessage = `
-⚡️ **نرخ خرید دلار امروز**: *${usdBuyValue} تومان*
-📈 **تغییرات نسبت به روز قبل**: *${usdBuyChange} تومان*
-📅 **تاریخ**: *${usdBuyDate}*
-💵 **قیمت دلار دیروز**: *${yesterdayValue} تومان*
+⚡️ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
+📈 **تغییرات نسبت به روز قبل**: *${persianUsdBuyChange} تومان*
+📅 **تاریخ**: *${persianUsdBuyDate}*
     `;
     
     // Send the response message to the user
