@@ -5,8 +5,8 @@ const moment = require('moment');
 // Token provided by you
 const token = '7971393473:AAHhxpn9m-KwN9VrKaVU426_e1gNjIgFJjU';
 
-// Your Fixer.io API key
-const fixerApiKey = '957a0187f777d66286bf887b8a80fe14';
+// Your ExchangeRate-API key (replace with the one you provided)
+const exchangeRateApiKey = '6b0accdd22af48a4ef1a3c56';  
 
 // Create a new Telegram bot instance
 const bot = new TelegramBot(token, { polling: true });
@@ -14,33 +14,25 @@ const bot = new TelegramBot(token, { polling: true });
 // Function to fetch USD to Toman conversion rates
 async function fetchExchangeRates() {
   try {
-    // Use Fixer.io API to get the rates
-    const response = await axios.get(`https://api.apilayer.com/fixer/latest?base=USD&symbols=IRR`, {
-      headers: {
-        'apikey': fixerApiKey,
-      },
-    });
-    const usdToToman = response.data.rates.IRR / 10; // IRR is Iranian Rial, divided by 10 to get Toman
+    // Use ExchangeRate-API to get the rates
+    const response = await axios.get(`https://v6.exchangerate-api.com/v6/${exchangeRateApiKey}/latest/USD`);
+    const usdToToman = response.data.conversion_rates.IRR / 10; // IRR is Iranian Rial, divided by 10 to get Toman
     return usdToToman;
   } catch (error) {
-    console.error('Error fetching exchange rates:', error);
+    console.error('Error fetching exchange rates:', error.response ? error.response.data : error.message);
     return null;
   }
 }
 
-// Function to fetch yesterday's USD to Toman rate
+// Function to fetch yesterday's USD to Toman rate (for comparison)
 async function fetchYesterdayExchangeRate() {
   try {
     const yesterday = moment().subtract(1, 'days').format('YYYY-MM-DD');
-    const response = await axios.get(`https://api.apilayer.com/fixer/${yesterday}?base=USD&symbols=IRR`, {
-      headers: {
-        'apikey': fixerApiKey,
-      },
-    });
-    const usdToTomanYesterday = response.data.rates.IRR / 10;
+    const response = await axios.get(`https://v6.exchangerate-api.com/v6/${exchangeRateApiKey}/history/USD/${yesterday}?symbols=IRR`);
+    const usdToTomanYesterday = response.data.conversion_rates.IRR / 10;
     return usdToTomanYesterday;
   } catch (error) {
-    console.error('Error fetching yesterday\'s exchange rates:', error);
+    console.error('Error fetching yesterday\'s exchange rates:', error.response ? error.response.data : error.message);
     return null;
   }
 }
