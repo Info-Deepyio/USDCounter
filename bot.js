@@ -5,14 +5,21 @@ const moment = require('moment');
 // Token provided by you
 const token = '7971393473:AAHhxpn9m-KwN9VrKaVU426_e1gNjIgFJjU';
 
+// Your Fixer.io API key
+const fixerApiKey = '957a0187f777d66286bf887b8a80fe14';
+
 // Create a new Telegram bot instance
 const bot = new TelegramBot(token, { polling: true });
 
 // Function to fetch USD to Toman conversion rates
 async function fetchExchangeRates() {
   try {
-    // Replace with the appropriate API endpoint for USD to Toman rates
-    const response = await axios.get('https://api.exchangerate-api.com/v4/latest/USD');
+    // Use Fixer.io API to get the rates
+    const response = await axios.get(`https://api.apilayer.com/fixer/latest?base=USD&symbols=IRR`, {
+      headers: {
+        'apikey': fixerApiKey,
+      },
+    });
     const usdToToman = response.data.rates.IRR / 10; // IRR is Iranian Rial, divided by 10 to get Toman
     return usdToToman;
   } catch (error) {
@@ -25,8 +32,12 @@ async function fetchExchangeRates() {
 async function fetchYesterdayExchangeRate() {
   try {
     const yesterday = moment().subtract(1, 'days').format('YYYY-MM-DD');
-    const response = await axios.get(`https://api.exchangerate-api.com/v4/${yesterday}/USD`);
-    const usdToTomanYesterday = response.data.rates.IRR / 10; // IRR is Iranian Rial, divided by 10 to get Toman
+    const response = await axios.get(`https://api.apilayer.com/fixer/${yesterday}?base=USD&symbols=IRR`, {
+      headers: {
+        'apikey': fixerApiKey,
+      },
+    });
+    const usdToTomanYesterday = response.data.rates.IRR / 10;
     return usdToTomanYesterday;
   } catch (error) {
     console.error('Error fetching yesterday\'s exchange rates:', error);
@@ -42,6 +53,7 @@ bot.onText(/\/usd/, async (msg) => {
   const todayRate = await fetchExchangeRates();
   const yesterdayRate = await fetchYesterdayExchangeRate();
 
+  // Check if rates were fetched successfully
   if (todayRate && yesterdayRate) {
     const rateDifference = todayRate - yesterdayRate;
     const differencePercentage = ((rateDifference / yesterdayRate) * 100).toFixed(2);
@@ -55,6 +67,7 @@ bot.onText(/\/usd/, async (msg) => {
     bot.sendMessage(chatId, responseMessage);
   } else {
     bot.sendMessage(chatId, '❌ خطا در دریافت نرخ‌ها، لطفاً بعداً امتحان کنید.');
+    console.error('Error fetching rates');
   }
 });
 
