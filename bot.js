@@ -79,6 +79,9 @@ bot.onText(/\/usd/, async (msg) => {
     const [formattedDate, formattedTime] = usdBuyDate.split(' '); // Use English date as is and convert time to Persian
     const persianFormattedTime = formatPersianTime(formattedTime); // Time in Persian numerals
 
+    // Convert date to Persian numerals
+    const persianFormattedDate = toPersianNumbers(formattedDate);
+
     // Calculate if the rate increased or decreased
     let changeText;
     if (usdBuyValue > yesterdayUsdBuyValue) {
@@ -92,16 +95,10 @@ bot.onText(/\/usd/, async (msg) => {
     // Prepare the message to send with bold formatting, Persian numerals, and added spacing
     const responseMessage = `
 ✨ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
-   
 📉 **نرخ دلار دیروز**: *${persianYesterdayUsdBuyValue} تومان*
-
 📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان ${changeText}*
-
----
-
-📅 **تاریخ**: *${formattedDate}*
+📅 **تاریخ**: *${persianFormattedDate}*
 ⏰ **زمان**: *${persianFormattedTime}*
-
 🔄 **اطلاعات به‌روز شده**: این اطلاعات به صورت زنده به روز رسانی می‌شود.
     `;
       
