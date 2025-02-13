@@ -5,8 +5,8 @@ const moment = require('moment');
 // Token provided by you
 const token = '7971393473:AAHhxpn9m-KwN9VrKaVU426_e1gNjIgFJjU';
 
-// Your ExchangeRate-API key (replace with the one you provided)
-const exchangeRateApiKey = '6b0accdd22af48a4ef1a3c56';  
+// Your ExchangeRate-API key (replace this with your API key)
+const exchangeRateApiKey = '6b0accdd22af48a4ef1a3c56';
 
 // Create a new Telegram bot instance
 const bot = new TelegramBot(token, { polling: true });
@@ -14,9 +14,9 @@ const bot = new TelegramBot(token, { polling: true });
 // Function to fetch USD to Toman conversion rates
 async function fetchExchangeRates() {
   try {
-    // Use ExchangeRate-API to get the rates
+    // API call to fetch the current exchange rates for USD
     const response = await axios.get(`https://v6.exchangerate-api.com/v6/${exchangeRateApiKey}/latest/USD`);
-    const usdToToman = response.data.conversion_rates.IRR / 10; // IRR is Iranian Rial, divided by 10 to get Toman
+    const usdToToman = response.data.conversion_rates.IRR / 10; // IRR is Iranian Rial, divide by 10 to get Toman
     return usdToToman;
   } catch (error) {
     console.error('Error fetching exchange rates:', error.response ? error.response.data : error.message);
