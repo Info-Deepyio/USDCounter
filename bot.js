@@ -27,13 +27,9 @@ function formatNumberWithCommas(number) {
   return decimalPart ? `${integerWithCommas}.${decimalPart}` : integerWithCommas;
 }
 
-// Function to format the date and time
-function formatPersianDateAndTime(dateString) {
-  const [datePart, timePart] = dateString.split(' ');
-  const formattedDate = toPersianNumbers(datePart); // Convert date to Persian
-  const formattedTime = toPersianNumbers(timePart); // Convert time to Persian
-
-  return { formattedDate, formattedTime };
+// Function to format the time in Persian numerals
+function formatPersianTime(timeString) {
+  return toPersianNumbers(timeString); // Convert time to Persian
 }
 
 // Function to fetch the USD buy rate and its change
@@ -80,7 +76,8 @@ bot.onText(/\/usd/, async (msg) => {
     const persianYesterdayUsdBuyValue = toPersianNumbers(formatNumberWithCommas(yesterdayUsdBuyValue.toString()));
 
     // Extract and format date and time from the API response
-    const { formattedDate, formattedTime } = formatPersianDateAndTime(usdBuyDate); 
+    const [formattedDate, formattedTime] = usdBuyDate.split(' '); // Use English date as is and convert time to Persian
+    const persianFormattedTime = formatPersianTime(formattedTime); // Time in Persian numerals
 
     // Calculate if the rate increased or decreased
     let changeText;
@@ -92,13 +89,20 @@ bot.onText(/\/usd/, async (msg) => {
       changeText = `بدون تغییر`;
     }
 
-    // Prepare the message to send with bold formatting and Persian numerals
+    // Prepare the message to send with bold formatting, Persian numerals, and added spacing
     const responseMessage = `
-\u200F⚡️ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
+✨ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
+   
 📉 **نرخ دلار دیروز**: *${persianYesterdayUsdBuyValue} تومان*
+
 📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان ${changeText}*
+
+---
+
 📅 **تاریخ**: *${formattedDate}*
-⏰ **زمان**: *${formattedTime}*
+⏰ **زمان**: *${persianFormattedTime}*
+
+🔄 **اطلاعات به‌روز شده**: این اطلاعات به صورت زنده به روز رسانی می‌شود.
     `;
       
     // Send the response message to the user
