@@ -21,11 +21,13 @@ async function fetchUsdRate() {
       const usdBuyValue = response.data['usd_buy'].value;
       const usdBuyChange = response.data['usd_buy'].change;
       const usdBuyDate = response.data['usd_buy'].date;
+      const yesterdayValue = response.data['usd_buy'].yesterday_value || "No data"; // Handle if no yesterday data is provided
 
       return {
         usdBuyValue,
         usdBuyChange,
         usdBuyDate,
+        yesterdayValue,
       };
     } else {
       console.error('usd_buy data not found in the response');
@@ -45,17 +47,18 @@ bot.onText(/\/usd/, async (msg) => {
   const rateData = await fetchUsdRate();
 
   if (rateData) {
-    const { usdBuyValue, usdBuyChange, usdBuyDate } = rateData;
+    const { usdBuyValue, usdBuyChange, usdBuyDate, yesterdayValue } = rateData;
 
-    // Prepare the message to send
+    // Prepare the message to send with bold formatting and added yesterday price
     const responseMessage = `
-⚡️ **نرخ خرید دلار امروز**: ${usdBuyValue} تومان
-📈 **تغییرات نسبت به روز قبل**: ${usdBuyChange} تومان
-🗓 **تاریخ**: ${usdBuyDate}
+⚡️ **نرخ خرید دلار امروز**: *${usdBuyValue} تومان*
+📈 **تغییرات نسبت به روز قبل**: *${usdBuyChange} تومان*
+📅 **تاریخ**: *${usdBuyDate}*
+💵 **قیمت دلار دیروز**: *${yesterdayValue} تومان*
     `;
     
     // Send the response message to the user
-    bot.sendMessage(chatId, responseMessage);
+    bot.sendMessage(chatId, responseMessage, { parse_mode: 'Markdown' });
   } else {
     bot.sendMessage(chatId, '❌ خطا در دریافت نرخ‌ها، لطفاً بعداً امتحان کنید.');
     console.error('Error fetching rates');
