@@ -82,13 +82,23 @@ bot.onText(/\/usd/, async (msg) => {
     // Extract and format date and time from the API response
     const { formattedDate, formattedTime } = formatPersianDateAndTime(usdBuyDate); 
 
+    // Calculate if the rate increased or decreased
+    let changeText;
+    if (usdBuyValue > yesterdayUsdBuyValue) {
+      changeText = `افزایش`;
+    } else if (usdBuyValue < yesterdayUsdBuyValue) {
+      changeText = `کاهش`;
+    } else {
+      changeText = `بدون تغییر`;
+    }
+
     // Prepare the message to send with bold formatting and Persian numerals
     const responseMessage = `
 \u200F⚡️ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
 📉 **نرخ دلار دیروز**: *${persianYesterdayUsdBuyValue} تومان*
-📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان افزایش*
+📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان ${changeText}*
 📅 **تاریخ**: *${formattedDate}*
-⏰ **زمان**: *${formattedTime} ساعت*
+⏰ **زمان**: *${formattedTime}*
     `;
       
     // Send the response message to the user
