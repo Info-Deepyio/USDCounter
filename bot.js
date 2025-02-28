@@ -1,116 +1,39 @@
-const TelegramBot = require('node-telegram-bot-api');
-const axios = require('axios');
+const TelegramBot = require("node-telegram-bot-api");
+const axios = require("axios");
 
-// Your token provided by Telegram
-const token = '7971393473:AAHhxpn9m-KwN9VrKaVU426_e1gNjIgFJjU';
+// Replace with your Telegram bot token
+const TOKEN = "7971393473:AAHhxpn9m-KwN9VrKaVU426_e1gNjIgFJjU";
+const API_URL = "https://brsapi.ir/FreeTsetmcBourseApi/Api_Free_Gold_Currency.json";
 
-// The new API URL (use your API key as mentioned)
-const apiUrl = 'https://api.navasan.tech/latest/?api_key=free7HKJj4k6FRl8XQb18vTxe1paPiB9';
+const bot = new TelegramBot(TOKEN, { polling: true });
 
-// Create a new Telegram bot instance
-const bot = new TelegramBot(token, { polling: true });
+// Function to fetch and format currency data
+async function fetchCurrencyData() {
+    try {
+        const response = await axios.get(API_URL);
+        const data = response.data;
 
-// Function to convert English numbers to Persian numbers
-function toPersianNumbers(str) {
-  const persianNumbers = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-  return str.replace(/[0-9]/g, (digit) => persianNumbers[digit]);
-}
+        if (!data || !data.currency) return "No currency data available.";
 
-// Function to format numbers with commas (Persian format)
-function formatNumberWithCommas(number) {
-  const numberString = number.toString();
-  const parts = numberString.split('.');
-  const integerPart = parts[0];
-  const decimalPart = parts[1];
+        const date = data.currency[0]?.date || "Unknown Date";
+        const time = data.currency[0]?.time || "Unknown Time";
 
-  const integerWithCommas = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '،');
-  return decimalPart ? `${integerWithCommas}.${decimalPart}` : integerWithCommas;
-}
+        const formattedCurrencies = data.currency.map(item =>
+            `💵 *${item.name}*: ${item.price.toLocaleString()} ${item.unit}`
+        ).join("\n\n");
 
-// Function to format the time in Persian numerals
-function formatPersianTime(timeString) {
-  return toPersianNumbers(timeString); // Convert time to Persian
-}
-
-// Function to fetch the USD buy rate and its change
-async function fetchUsdRate() {
-  try {
-    const response = await axios.get(apiUrl);
-
-    if (response.data && response.data['usd_buy']) {
-      const usdBuyValue = response.data['usd_buy'].value;
-      const usdBuyChange = response.data['usd_buy'].change;
-      const usdBuyDate = response.data['usd_buy'].date;
-
-      return {
-        usdBuyValue,
-        usdBuyChange,
-        usdBuyDate,
-      };
-    } else {
-      console.error('usd_buy data not found in the response');
-      return null;
+        return `📅 *تاریخ:* ${date}\n⏰ *زمان:* ${time}\n\n📌 *نرخ ارز:*\n${formattedCurrencies}`;
+    } catch (error) {
+        console.error("Error fetching data:", error);
+        return "خطا در دریافت اطلاعات!";
     }
-  } catch (error) {
-    console.error('Error fetching USD rate:', error.response ? error.response.data : error.message);
-    return null;
-  }
 }
 
-// Command handler when the user types "/usd"
-bot.onText(/\/usd/, async (msg) => {
-  const chatId = msg.chat.id;
-
-  // Fetch today's USD buy rate
-  const rateData = await fetchUsdRate();
-
-  if (rateData) {
-    const { usdBuyValue, usdBuyChange, usdBuyDate } = rateData;
-
-    // Calculate yesterday's value by subtracting change from today's value
-    const yesterdayUsdBuyValue = usdBuyValue - usdBuyChange;
-
-    // Convert numbers to Persian
-    const persianUsdBuyValue = toPersianNumbers(formatNumberWithCommas(usdBuyValue.toString()));
-    const persianUsdBuyChange = toPersianNumbers(formatNumberWithCommas(usdBuyChange.toString()));
-    const persianYesterdayUsdBuyValue = toPersianNumbers(formatNumberWithCommas(yesterdayUsdBuyValue.toString()));
-
-    // Extract and format date and time from the API response
-    const [formattedDate, formattedTime] = usdBuyDate.split(' '); // Use English date as is and convert time to Persian
-    const persianFormattedTime = formatPersianTime(formattedTime); // Time in Persian numerals
-
-    // Convert date to Persian numerals
-    const persianFormattedDate = toPersianNumbers(formattedDate);
-
-    // Calculate if the rate increased or decreased
-    let changeText;
-    if (usdBuyValue > yesterdayUsdBuyValue) {
-      changeText = `افزایش`;
-    } else if (usdBuyValue < yesterdayUsdBuyValue) {
-      changeText = `کاهش`;
-    } else {
-      changeText = `بدون تغییر`;
-    }
-
-    // Prepare the message to send with bold formatting, Persian numerals, and added spacing
-    const responseMessage = `
-✨ **نرخ خرید دلار امروز**: *${persianUsdBuyValue} تومان*
-
-📉 **نرخ دلار دیروز**: *${persianYesterdayUsdBuyValue} تومان*
-
-📈 **نسبت تغییرات به دیروز**: *${persianUsdBuyChange} تومان (${changeText})*
-
-📅 **تاریخ**: *${persianFormattedDate}*
-
-⏰ **زمان**: *${persianFormattedTime}*
-    `;
-      
-    // Send the response message to the user with right-to-left alignment
-    bot.sendMessage(chatId, responseMessage, { parse_mode: 'Markdown', disable_web_page_preview: true });
-  } else {
-    bot.sendMessage(chatId, '❌ خطا در دریافت نرخ‌ها، لطفاً بعداً امتحان کنید.');
-    console.error('Error fetching rates');
-  }
+// Handle /currency command
+bot.onText(/\/currency/, async (msg) => {
+    const chatId = msg.chat.id;
+    const currencyData = await fetchCurrencyData();
+    bot.sendMessage(chatId, currencyData, { parse_mode: "Markdown" });
 });
 
-console.log('Bot is running...');
+console.log("Bot is running...");
