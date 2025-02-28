@@ -7,6 +7,9 @@ const API_URL = "https://brsapi.ir/FreeTsetmcBourseApi/Api_Free_Gold_Currency.js
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 
+// Store user's last selected category to prevent repeating
+let lastCategory = {};
+
 // Function to fetch market data
 async function fetchMarketData(category) {
     try {
@@ -48,15 +51,20 @@ async function fetchMarketData(category) {
 }
 
 // Function to generate inline keyboard
-function getInlineKeyboard(category) {
+function getInlineKeyboard(excludeCategory = "") {
+    const buttons = [
+        { text: "💵 ارز", callback_data: "currency" },
+        { text: "🔗 ارز دیجیتال", callback_data: "crypto" },
+        { text: "💰 طلا", callback_data: "gold" }
+    ];
+
+    // Remove the last selected category from the options
+    const filteredButtons = buttons.filter(button => button.callback_data !== excludeCategory);
+
     return {
         reply_markup: {
             inline_keyboard: [
-                [
-                    { text: "💵 ارز", callback_data: "currency" },
-                    { text: "🔗 ارز دیجیتال", callback_data: "crypto" },
-                    { text: "💰 طلا", callback_data: "gold" }
-                ]
+                filteredButtons, // Show only the options excluding the last selected category
             ]
         }
     };
@@ -65,16 +73,31 @@ function getInlineKeyboard(category) {
 // Handle /currency command
 bot.onText(/\/currency/, async (msg) => {
     const chatId = msg.chat.id;
-    const marketData = await fetchMarketData("currency");
-    bot.sendMessage(chatId, marketData, { parse_mode: "Markdown", ...getInlineKeyboard("currency") });
+    lastCategory[chatId] = ""; // Reset the last selected category
+    const message = "📊 *انتخاب کنید:*";
+
+    bot.sendMessage(chatId, message, { parse_mode: "Markdown", ...getInlineKeyboard() });
 });
 
 // Handle callback queries for inline buttons
 bot.on("callback_query", async (query) => {
     const chatId = query.message.chat.id;
     const messageId = query.message.message_id;
-    const category = query.data; // currency, crypto, or gold
+    const category = query.data;
 
+    // Prevent selecting the same category twice
+    if (lastCategory[chatId] === category) {
+        bot.answerCallbackQuery(query.id, {
+            text: "❌ شما قبلاً این گزینه را انتخاب کرده‌اید! لطفاً گزینه دیگری انتخاب کنید.",
+            show_alert: true
+        });
+        return;
+    }
+
+    // Update the last selected category
+    lastCategory[chatId] = category;
+
+    // Fetch data and update the message
     const marketData = await fetchMarketData(category);
 
     // Edit the message with the new data and updated inline keyboard
@@ -82,7 +105,7 @@ bot.on("callback_query", async (query) => {
         chat_id: chatId,
         message_id: messageId,
         parse_mode: "Markdown",
-        ...getInlineKeyboard(category)
+        ...getInlineKeyboard(category) // Exclude the current category to prevent selecting it again
     });
 
     // Answer callback to remove "loading" icon
