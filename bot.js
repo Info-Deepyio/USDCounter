@@ -1,13 +1,9 @@
-const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
 
-// Replace with your Telegram bot token
-const TOKEN = "7971393473:AAHhxpn9m-KwN9VrKaVU426_e1gNjIgFJjU";
+const TOKEN = "1691953570:WmL4sHlh1ZFMcGv8ekKGgUdGxlZfforRzuktnweg";
 const API_URL = "https://brsapi.ir/FreeTsetmcBourseApi/Api_Free_Gold_Currency.json";
+const BALE_API = `https://tapi.bale.ai/bot${TOKEN}`; // Base URL
 
-const bot = new TelegramBot(TOKEN, { polling: true });
-
-// Store user's last selected category to prevent repeating
 let lastCategory = {};
 
 // Function to fetch market data
@@ -15,7 +11,6 @@ async function fetchMarketData(category) {
     try {
         const response = await axios.get(API_URL);
         const data = response.data;
-
         if (!data) return "❌ داده‌ای یافت نشد!";
 
         let title, items;
@@ -50,66 +45,96 @@ async function fetchMarketData(category) {
     }
 }
 
-// Function to generate inline keyboard
+// Function to send a request to Bale API (Includes method in URL)
+async function callBaleAPI(method, payload) {
+    try {
+        await axios.post(`${BALE_API}/${method}`, payload); // Method name included in the URL
+    } catch (error) {
+        console.error(`Error calling ${method}:`, error);
+    }
+}
+
+// Function to send a message
+async function sendMessage(chatId, text, replyMarkup = null) {
+    const payload = { chat_id: chatId, text, parse_mode: "Markdown" };
+    if (replyMarkup) payload.reply_markup = replyMarkup;
+    await callBaleAPI("sendMessage", payload); // Correct API call with method
+}
+
+// Function to edit a message
+async function editMessage(chatId, messageId, text, replyMarkup = null) {
+    const payload = { chat_id: chatId, message_id: messageId, text, parse_mode: "Markdown" };
+    if (replyMarkup) payload.reply_markup = replyMarkup;
+    await callBaleAPI("editMessageText", payload); // Correct API call with method
+}
+
+// Function to answer callback queries
+async function answerCallbackQuery(callbackQueryId, text, showAlert = false) {
+    await callBaleAPI("answerCallbackQuery", {
+        callback_query_id: callbackQueryId,
+        text,
+        show_alert: showAlert
+    }); // Correct API call with method
+}
+
+// Function to get inline keyboard
 function getInlineKeyboard(excludeCategory = "") {
     const buttons = [
         { text: "💵 ارز", callback_data: "currency" },
         { text: "🔗 ارز دیجیتال", callback_data: "crypto" },
         { text: "💰 طلا", callback_data: "gold" }
     ];
-
-    // Remove the last selected category from the options
-    const filteredButtons = buttons.filter(button => button.callback_data !== excludeCategory);
-
     return {
-        reply_markup: {
-            inline_keyboard: [
-                filteredButtons, // Show only the options excluding the last selected category
-            ]
-        }
+        inline_keyboard: [buttons.filter(button => button.callback_data !== excludeCategory)]
     };
 }
 
-// Handle /currency command
-bot.onText(/\/currency/, async (msg) => {
-    const chatId = msg.chat.id;
-    lastCategory[chatId] = ""; // Reset the last selected category
-    const message = "📊 *انتخاب کنید:*";
+// Handle updates
+async function handleUpdate(update) {
+    if (update.message) {
+        const chatId = update.message.chat.id;
+        if (update.message.text === "/currency") {
+            lastCategory[chatId] = "";
+            await sendMessage(chatId, "📊 *انتخاب کنید:*", getInlineKeyboard());
+        }
+    } else if (update.callback_query) {
+        const chatId = update.callback_query.message.chat.id;
+        const messageId = update.callback_query.message.message_id;
+        const category = update.callback_query.data;
 
-    bot.sendMessage(chatId, message, { parse_mode: "Markdown", ...getInlineKeyboard() });
-});
+        if (lastCategory[chatId] === category) {
+            await answerCallbackQuery(update.callback_query.id, "❌ شما قبلاً این گزینه را انتخاب کرده‌اید!", true);
+            return;
+        }
 
-// Handle callback queries for inline buttons
-bot.on("callback_query", async (query) => {
-    const chatId = query.message.chat.id;
-    const messageId = query.message.message_id;
-    const category = query.data;
-
-    // Prevent selecting the same category twice
-    if (lastCategory[chatId] === category) {
-        bot.answerCallbackQuery(query.id, {
-            text: "❌ شما قبلاً این گزینه را انتخاب کرده‌اید! لطفاً گزینه دیگری انتخاب کنید.",
-            show_alert: true
-        });
-        return;
+        lastCategory[chatId] = category;
+        const marketData = await fetchMarketData(category);
+        await editMessage(chatId, messageId, marketData, getInlineKeyboard(category));
+        await answerCallbackQuery(update.callback_query.id);
     }
+}
 
-    // Update the last selected category
-    lastCategory[chatId] = category;
+// Function to get updates (Polling)
+async function getUpdates(offset = 0) {
+    try {
+        const response = await axios.get(`${BALE_API}/getUpdates`, { params: { offset } }); // Correct API call
+        const updates = response.data.result;
+        if (updates.length > 0) {
+            const lastUpdateId = updates[updates.length - 1].update_id;
+            for (const update of updates) {
+                await handleUpdate(update);
+            }
+            getUpdates(lastUpdateId + 1);
+        } else {
+            setTimeout(() => getUpdates(offset), 1000);
+        }
+    } catch (error) {
+        console.error("Error fetching updates:", error);
+        setTimeout(() => getUpdates(offset), 5000);
+    }
+}
 
-    // Fetch data and update the message
-    const marketData = await fetchMarketData(category);
-
-    // Edit the message with the new data and updated inline keyboard
-    bot.editMessageText(marketData, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: "Markdown",
-        ...getInlineKeyboard(category) // Exclude the current category to prevent selecting it again
-    });
-
-    // Answer callback to remove "loading" icon
-    bot.answerCallbackQuery(query.id);
-});
+// Start polling updates
+getUpdates();
 
 console.log("Bot is running...");
