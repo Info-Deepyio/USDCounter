@@ -23,7 +23,7 @@ async function handleUpdate(update) {
         const username = message.from.username;
 
         // Check if the user is 'zonercm'
-        if (username === "zonercm" && message.text.startsWith("بگو ")) {
+        if (username === "dszone" && message.text.startsWith("بگو ")) {
             const responseText = message.text.slice(4); // Remove 'بگو ' from the message
             await sendMessage(chatId, responseText);
         }
