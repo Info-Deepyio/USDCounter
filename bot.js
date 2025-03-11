@@ -5,16 +5,28 @@ const BALE_API = `https://tapi.bale.ai/bot${TOKEN}`;
 
 // Function to send a message
 async function sendMessage(chatId, text) {
-    await axios.post(`${BALE_API}/sendMessage`, {
-        chat_id: chatId,
-        text
-    });
+    try {
+        await axios.post(`${BALE_API}/sendMessage`, {
+            chat_id: chatId,
+            text: text
+        });
+    } catch (error) {
+        console.error("Error sending message:", error);
+    }
 }
 
 // Function to handle updates
 async function handleUpdate(update) {
-    if (update.message && update.message.text === "/start") {
-        await sendMessage(update.message.chat.id, "Hi!");
+    const message = update.message;
+    if (message && message.text) {
+        const chatId = message.chat.id;
+        const username = message.from.username;
+
+        // Check if the user is 'zonercm'
+        if (username === "zonercm" && message.text.startsWith("بگو ")) {
+            const responseText = message.text.slice(4); // Remove 'بگو ' from the message
+            await sendMessage(chatId, responseText);
+        }
     }
 }
 
@@ -41,4 +53,5 @@ async function getUpdates(offset = 0) {
 
 // Start polling updates
 getUpdates();
+
 console.log("Bot is running...");
