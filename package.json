@@ -1,25 +1,14 @@
 {
   "name": "telegram-feedback-bot",
   "version": "1.0.0",
-  "description": "A Telegram bot for collecting user feedback in Persian.",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
-    "axios": "^1.6.7",
-    "jalaali-moment": "^3.3.11",
-    "moment": "^2.30.1",
-    "moment-timezone": "^0.5.45"
-  },
-  "keywords": [
-    "telegram",
-    "bot",
-    "feedback",
-    "persian",
-    "iranian",
-    "jalaali"
-  ],
-  "author": "",
-  "license": "ISC"
+    "axios": "^1.3.0",
+    "moment": "^2.29.1",
+    "moment-jalaali": "^0.11.2",
+    "moment-timezone": "^0.5.43"
+  }
 }
