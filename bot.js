@@ -101,8 +101,8 @@ async function handleCallbackQuery(query) {
             reply_markup: replyMarkup,
         });
 
-        // Listening for feedback from user
-        setTimeout(() => collectFeedback(chatId, msg.from), 1000);
+        // Collect feedback from user
+        await collectFeedback(chatId, query.from);
     }
 
     if (query.data === 'back_to_start') {
@@ -134,30 +134,32 @@ async function handleCallbackQuery(query) {
 // Collect feedback
 async function collectFeedback(chatId, user) {
     const currentDate = moment().format('YYYY-MM-DD');
+
     if (!feedbacks[user.id]) {
         feedbacks[user.id] = {};
     }
 
+    // If the user has already submitted feedback today, do not send it again
     if (feedbacks[user.id][currentDate]) {
         await sendMessage(chatId, '❗️ شما قبلاً بازخوردی ارسال کرده‌اید.');
-    } else {
-        // Store feedback (simulate user input)
-        feedbacks[user.id][currentDate] = "This is the user's feedback"; // Replace with actual feedback collection
+        return;
+    }
 
-        // Send feedback to special users
-        const feedbackMessage = `
+    // Collect feedback
+    feedbacks[user.id][currentDate] = "This is the user's feedback"; // Replace with actual user input collection
+
+    const feedbackMessage = `
 ✨ بازخورد جدید:
 
 👤 از طرف: ${user.username} (${user.first_name})
 📝 متن بازخورد: This is the user's feedback
 📅 تاریخ: ${getFormattedDate()}`;
 
-        for (const specialUserId of specialUsers) {
-            await sendMessage(specialUserId, feedbackMessage);
-        }
-
-        await sendMessage(chatId, '✅ بازخورد شما ارسال شد!');
+    for (const specialUserId of specialUsers) {
+        await sendMessage(specialUserId, feedbackMessage);
     }
+
+    await sendMessage(chatId, '✅ بازخورد شما ارسال شد!');
 }
 
 // Handle updates (messages and callback queries)
@@ -183,7 +185,7 @@ async function getUpdates() {
             handleUpdates(update);
         }
 
-        // Keep polling for new updates
+        // Keep polling for new updates with a 1-second delay to avoid spam
         setTimeout(getUpdates, 1000);
     } catch (error) {
         console.error('⚠️ Error fetching updates:', error);
