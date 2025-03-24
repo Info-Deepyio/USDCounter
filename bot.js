@@ -1,257 +1,246 @@
 const axios = require('axios');
 const moment = require('moment-timezone');
 
-// Your Telegram Bot Token here
-const token = '1355028807:h4DAqn1oPtnjpnLVyFaqIXISgjNrJH3l497fBs9w';
-const botApiUrl = `https://tapi.bale.ai/bot${token}`;
+// Configuration
+const TOKEN = '1355028807:h4DAqn1oPtnjpnLVyFaqIXISgjNrJH3l497fBs9w';
+const BOT_API_URL = `https://tapi.bale.ai/bot${TOKEN}`;
 
 // Special user IDs for feedback
-const specialUsers = [1085839779, 844843541]; // Replace with your special user IDs
-const feedbacks = {}; // To store feedbacks and manage user daily limits
+const SPECIAL_USERS = [1085839779, 844843541];
 
-// Persian numerals function
-const PersianNumbers = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+// Persian numerals mapping
+const PERSIAN_NUMBERS = {
+    '0': '۰', '1': '۱', '2': '۲', '3': '۳', '4': '۴', 
+    '5': '۵', '6': '۶', '7': '۷', '8': '۸', '9': '۹'
+};
 
-function toPersianNumber(number) {
-    return number.toString().split('').map(char => PersianNumbers[parseInt(char)] || char).join('');
+// Utility functions
+function toPersianNumber(num) {
+    return num.toString().replace(/\d/g, d => PERSIAN_NUMBERS[d]);
 }
 
-// Get formatted date and time in Persian with Tehran timezone
-function getFormattedDate() {
-    // Use Tehran timezone
+function getFormattedPersianDate() {
     const now = moment().tz('Asia/Tehran');
+    const day = toPersianNumber(now.format('DD'));
+    const month = toPersianNumber(now.format('MM'));
+    const year = toPersianNumber(now.format('YYYY'));
+    const time = toPersianNumber(now.format('HH:mm:ss'));
     
-    const day = toPersianNumber(now.date());
-    const month = toPersianNumber(now.month() + 1); // Month is zero-indexed
-    const year = toPersianNumber(now.year());
-    const hours = toPersianNumber(now.hours());
-    const minutes = toPersianNumber(now.minutes());
-    const seconds = toPersianNumber(now.seconds());
-    
-    return `${day} / ${month} / ${year} - ${hours}:${minutes}:${seconds}`;
+    return `${day}/${month}/${year} - ${time}`;
 }
 
-// Send message via Telegram Bot API
-async function sendMessage(chatId, text, replyMarkup = null) {
-    const params = {
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'HTML',
-        reply_markup: replyMarkup,
-    };
+// User feedback tracking
+const USER_FEEDBACKS = {};
+const FEEDBACK_COOLDOWN = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
+// Logging function
+function log(message) {
+    console.log(`[${getFormattedPersianDate()}] ${message}`);
+}
+
+// Send message with error handling and Persian formatting
+async function sendPersianMessage(chatId, text, replyMarkup = null, options = {}) {
     try {
-        return await axios.post(`${botApiUrl}/sendMessage`, params);
+        const params = {
+            chat_id: chatId,
+            text: text,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup,
+            ...options
+        };
+
+        return await axios.post(`${BOT_API_URL}/sendMessage`, params);
     } catch (error) {
-        console.error('Error sending message:', error.response ? error.response.data : error.message);
+        log(`❌ خطا در ارسال پیام: ${error.message}`);
+        return null;
     }
 }
 
-// Handle start command
-async function handleStart(msg) {
-    const chatId = msg.chat.id;
-    const greetingText = `👋 سلام! خوش آمدید.
-📅 تاریخ و ساعت: ${getFormattedDate()}
-    
-🔄 لطفاً رباتی که می‌خواهید بازخورد بدهید را انتخاب کنید.`;
+// Check if user can submit feedback
+function canSubmitFeedback(userId) {
+    const userFeedback = USER_FEEDBACKS[userId];
+    if (!userFeedback) return true;
 
-    const replyMarkup = {
-        inline_keyboard: [
-            [{ text: '🔝 ربات آپلود | uploadd_bot', callback_data: 'uploader_bot' }],
-        ],
-    };
-
-    await sendMessage(chatId, greetingText, replyMarkup);
+    const currentTime = Date.now();
+    return (currentTime - userFeedback.timestamp) >= FEEDBACK_COOLDOWN;
 }
 
-// Handle callback queries
-async function handleCallbackQuery(query) {
-    const chatId = query.message.chat.id;
-    const messageId = query.message.message_id;
-    const user = query.from;
-    
-    if (query.data === 'uploader_bot') {
-        const botInfoText = `💬 نام: •آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•
+// Main bot logic
+class TelegramBot {
+    constructor() {
+        this.offset = 0;
+        this.isProcessing = false;
+    }
+
+    // Start command handler
+    async handleStart(message) {
+        const chatId = message.chat.id;
+        const greetingText = `👋 سلام! خوش آمدید.
+📅 تاریخ و ساعت: ${getFormattedPersianDate()}
+
+🤖 لطفاً رباتی که می‌خواهید بازخورد دهید را انتخاب کنید.`;
+
+        const replyMarkup = {
+            inline_keyboard: [
+                [{ text: '🔝 ربات آپلود | uploadd_bot', callback_data: 'uploader_bot' }]
+            ]
+        };
+
+        await sendPersianMessage(chatId, greetingText, replyMarkup);
+    }
+
+    // Feedback collection handler
+    async handleFeedback(message) {
+        const chatId = message.chat.id;
+        const userId = message.from.id;
+        const feedbackText = message.text;
+
+        // Validate feedback length
+        if (!feedbackText || feedbackText.length < 10) {
+            await sendPersianMessage(chatId, '❌ بازخورد باید حداقل ۱۰ کاراکتر داشته باشد.');
+            return;
+        }
+
+        // Check cooldown
+        if (!canSubmitFeedback(userId)) {
+            const remainingTime = this.getRemainingCooldownTime(userId);
+            await sendPersianMessage(chatId, `⏳ شما باید ${remainingTime} صبر کنید تا بتوانید دوباره بازخورد ارسال کنید.`);
+            return;
+        }
+
+        // Store feedback
+        USER_FEEDBACKS[userId] = {
+            text: feedbackText,
+            timestamp: Date.now(),
+            username: message.from.username || 'بدون نام کاربری',
+            firstName: message.from.first_name || 'بدون نام'
+        };
+
+        // Prepare and send feedback to special users
+        const feedbackMessage = `
+✨ بازخورد جدید:
+
+👤 کاربر: ${USER_FEEDBACKS[userId].username} (${USER_FEEDBACKS[userId].firstName})
+🆔 شناسه کاربری: ${userId}
+📝 متن بازخورد: ${feedbackText}
+📅 تاریخ: ${getFormattedPersianDate()}`;
+
+        // Send to special users
+        for (const specialUserId of SPECIAL_USERS) {
+            await sendPersianMessage(specialUserId, feedbackMessage);
+        }
+
+        // Confirm to original user
+        await sendPersianMessage(chatId, '✅ بازخورد شما با موفقیت ارسال شد!\n⏳ می‌توانید پس از ۲۴ ساعت مجدداً بازخورد ارسال کنید.');
+    }
+
+    // Get remaining cooldown time
+    getRemainingCooldownTime(userId) {
+        const userFeedback = USER_FEEDBACKS[userId];
+        if (!userFeedback) return '۰ ساعت';
+
+        const elapsedTime = Date.now() - userFeedback.timestamp;
+        const remainingTime = FEEDBACK_COOLDOWN - elapsedTime;
+
+        const hours = Math.floor(remainingTime / (60 * 60 * 1000));
+        const minutes = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
+
+        return `${toPersianNumber(hours)} ساعت و ${toPersianNumber(minutes)} دقیقه`;
+    }
+
+    // Handle callback queries
+    async handleCallbackQuery(callbackQuery) {
+        const chatId = callbackQuery.message.chat.id;
+        const messageId = callbackQuery.message.message_id;
+        
+        switch (callbackQuery.data) {
+            case 'uploader_bot':
+                const botInfoText = `💬 نام: •آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•
 🆔 آیدی: @uploadd_bot
 📂 هدف: آپلود و مدیریت فایل به روشی آسان و مدرن!`;
 
-        const replyMarkup = {
-            inline_keyboard: [
-                [{ text: '📩 ارسال بازخورد', callback_data: 'send_feedback' }],
-                [{ text: '↩️ بازگشت', callback_data: 'back_to_start' }],
-            ],
-        };
+                const replyMarkup = {
+                    inline_keyboard: [
+                        [{ text: '📩 ارسال بازخورد', callback_data: 'send_feedback' }],
+                        [{ text: '↩️ بازگشت', callback_data: 'back_to_start' }]
+                    ]
+                };
 
-        await axios.post(`${botApiUrl}/editMessageText`, {
-            chat_id: chatId,
-            message_id: messageId,
-            text: botInfoText,
-            parse_mode: 'HTML',
-            reply_markup: replyMarkup,
-        });
-    }
+                await axios.post(`${BOT_API_URL}/editMessageText`, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    text: botInfoText,
+                    parse_mode: 'HTML',
+                    reply_markup: replyMarkup
+                });
+                break;
 
-    if (query.data === 'send_feedback') {
-        const feedbackText = `📝 لطفاً بازخورد خود را در مورد این ربات وارد کنید.`;
+            case 'send_feedback':
+                await sendPersianMessage(chatId, '📝 لطفاً بازخورد خود را در یک پیام ارسال کنید.');
+                break;
 
-        const replyMarkup = {
-            inline_keyboard: [
-                [{ text: '↩️ بازگشت', callback_data: 'back_to_bot_info' }],
-            ],
-        };
-
-        await axios.post(`${botApiUrl}/editMessageText`, {
-            chat_id: chatId,
-            message_id: messageId,
-            text: feedbackText,
-            parse_mode: 'HTML',
-            reply_markup: replyMarkup,
-        });
-
-        // Collect feedback from user
-        await startFeedbackCollection(chatId, user);
-    }
-
-    if (query.data === 'back_to_start') {
-        await handleStart(query.message);
-    }
-
-    if (query.data === 'back_to_bot_info') {
-        const botInfoText = `💬 نام: •آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•
-🆔 آیدی: @uploadd_bot
-📂 هدف: آپلود و مدیریت فایل به روشی آسان و مدرن`;
-
-        const replyMarkup = {
-            inline_keyboard: [
-                [{ text: '📩 ارسال بازخورد', callback_data: 'send_feedback' }],
-                [{ text: '↩️ بازگشت', callback_data: 'back_to_start' }],
-            ],
-        };
-
-        await axios.post(`${botApiUrl}/editMessageText`, {
-            chat_id: chatId,
-            message_id: messageId,
-            text: botInfoText,
-            parse_mode: 'HTML',
-            reply_markup: replyMarkup,
-        });
-    }
-}
-
-// Start feedback collection process
-async function startFeedbackCollection(chatId, user) {
-    const currentDate = moment().tz('Asia/Tehran').format('YYYY-MM-DD');
-
-    // Initialize user feedback tracking if not exists
-    if (!feedbacks[user.id]) {
-        feedbacks[user.id] = {};
-    }
-
-    // Check if user has already submitted feedback today
-    if (feedbacks[user.id][currentDate]) {
-        const remainingTime = moment(feedbacks[user.id][currentDate].nextAllowedTime).fromNow();
-        await sendMessage(chatId, `❗️ شما قبلاً بازخورد ارسال کرده‌اید. لطفاً ${remainingTime} مجدداً تلاش کنید.`);
-        return;
-    }
-
-    // Send instruction to send feedback
-    await sendMessage(chatId, '📝 لطفاً بازخورد خود را در یک پیام ارسال کنید.');
-}
-
-// Process incoming feedback
-async function processFeedback(msg) {
-    const chatId = msg.chat.id;
-    const user = msg.from;
-    const feedbackText = msg.text;
-
-    // Validate feedback
-    if (!feedbackText || feedbackText.length < 10) {
-        await sendMessage(chatId, '❌ بازخورد باید حداقل ۱۰ کاراکتر داشته باشد.');
-        return;
-    }
-
-    const currentDate = moment().tz('Asia/Tehran').format('YYYY-MM-DD');
-
-    // Initialize user feedback tracking if not exists
-    if (!feedbacks[user.id]) {
-        feedbacks[user.id] = {};
-    }
-
-    // Set cooldown for 24 hours
-    const nextAllowedTime = moment().tz('Asia/Tehran').add(1, 'day');
-    
-    // Store feedback details
-    feedbacks[user.id][currentDate] = {
-        text: feedbackText,
-        timestamp: moment().tz('Asia/Tehran').toISOString(),
-        nextAllowedTime: nextAllowedTime.toISOString()
-    };
-
-    // Prepare feedback message
-    const feedbackMessage = `
-✨ بازخورد جدید:
-
-👤 از طرف: ${user.username || 'بدون نام کاربری'} (${user.first_name || 'بدون نام'})
-👤 شناسه کاربری: ${user.id}
-📝 متن بازخورد: ${feedbackText}
-📅 تاریخ: ${getFormattedDate()}`;
-
-    // Send feedback to special users
-    for (const specialUserId of specialUsers) {
-        await sendMessage(specialUserId, feedbackMessage);
-    }
-
-    // Confirm feedback submission to user
-    await sendMessage(chatId, '✅ بازخورد شما با موفقیت ارسال شد!\n⏳ شما می‌توانید پس از ۲۴ ساعت مجدداً بازخورد ارسال کنید.');
-}
-
-// Handle updates (messages and callback queries)
-function handleUpdates(update) {
-    if (update.message) {
-        if (update.message.text === '/start') {
-            handleStart(update.message);
-        } else {
-            // Process any text message as potential feedback
-            processFeedback(update.message);
+            case 'back_to_start':
+                await this.handleStart(callbackQuery.message);
+                break;
         }
     }
 
-    if (update.callback_query) {
-        handleCallbackQuery(update.callback_query);
-    }
-}
-
-// Poll for updates (using long polling)
-async function getUpdates(offset = 0) {
-    try {
-        const response = await axios.get(`${botApiUrl}/getUpdates`, {
-            params: {
-                offset: offset,
-                timeout: 30
+    // Process incoming updates
+    async processUpdate(update) {
+        try {
+            if (update.message) {
+                if (update.message.text === '/start') {
+                    await this.handleStart(update.message);
+                } else {
+                    await this.handleFeedback(update.message);
+                }
             }
-        });
 
-        const updates = response.data.result;
-
-        if (updates.length > 0) {
-            // Process each update
-            for (const update of updates) {
-                handleUpdates(update);
-                
-                // Update offset to acknowledge processed updates
-                offset = update.update_id + 1;
+            if (update.callback_query) {
+                await this.handleCallbackQuery(update.callback_query);
             }
+        } catch (error) {
+            log(`❌ خطا در پردازش به‌روزرسانی: ${error.message}`);
         }
+    }
 
-        // Continue polling with updated offset
-        getUpdates(offset);
-    } catch (error) {
-        console.error('⚠️ Error fetching updates:', error);
-        
-        // Wait and retry
-        setTimeout(() => getUpdates(offset), 5000);
+    // Fetch updates
+    async fetchUpdates() {
+        if (this.isProcessing) return;
+
+        this.isProcessing = true;
+        try {
+            const response = await axios.get(`${BOT_API_URL}/getUpdates`, {
+                params: {
+                    offset: this.offset,
+                    timeout: 30
+                }
+            });
+
+            const updates = response.data.result;
+
+            if (updates && updates.length > 0) {
+                for (const update of updates) {
+                    await this.processUpdate(update);
+                    this.offset = update.update_id + 1;
+                }
+            }
+        } catch (error) {
+            log(`❌ خطا در دریافت به‌روزرسانی‌ها: ${error.message}`);
+        } finally {
+            this.isProcessing = false;
+            // Schedule next update fetch
+            setTimeout(() => this.fetchUpdates(), 1000);
+        }
+    }
+
+    // Start the bot
+    start() {
+        log('🤖 ربات شروع به کار کرد.');
+        this.fetchUpdates();
     }
 }
 
-// Start polling for updates
-getUpdates();
+// Initialize and start the bot
+const bot = new TelegramBot();
+bot.start();
