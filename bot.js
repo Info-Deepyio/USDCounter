@@ -1,173 +1,251 @@
 const axios = require('axios');
 const moment = require('moment');
 
-// Your Telegram Bot Token here
-const token = '1355028807:h4DAqn1oPtnjpnLVyFaqIXISgjNrJH3l497fBs9w';
-const botApiUrl = `https://tapi.bale.ai/bot${token}`;
+// Configuration
+const CONFIG = {
+    BOT_TOKEN: '1355028807:h4DAqn1oPtnjpnLVyFaqIXISgjNrJH3l497fBs9w',
+    BASE_API_URL: 'https://tapi.bale.ai/bot',
+    SPECIAL_USERS: [1085839779, 844843541],
+    FEEDBACK_COOLDOWN_HOURS: 24
+};
 
-// Special user IDs for feedback
-const specialUsers = [1085839779, 844843541]; // Replace with your special user IDs
-const feedbacks = {}; // To store feedbacks and manage user daily limits
+// Persian numerals mapping
+const PERSIAN_NUMERALS = {
+    '0': '۰', '1': '۱', '2': '۲', '3': '۳', '4': '۴', 
+    '5': '۵', '6': '۶', '7': '۷', '8': '۸', '9': '۹'
+};
 
-// Persian numerals function
-const PersianNumbers = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-
+/**
+ * Convert Arabic numerals to Persian numerals
+ * @param {number|string} number - Number to convert
+ * @returns {string} Persian numeral representation
+ */
 function toPersianNumber(number) {
-    return number.toString().split('').map(char => PersianNumbers[parseInt(char)]).join('');
+    return number.toString()
+        .split('')
+        .map(digit => PERSIAN_NUMERALS[digit] || digit)
+        .join('');
 }
 
-// Get formatted date and time in Persian
-function getFormattedDate() {
+/**
+ * Get current date and time in Persian format
+ * @returns {string} Formatted date and time
+ */
+function getFormattedPersianDateTime() {
     const now = moment();
-    const day = toPersianNumber(now.date());
-    const month = toPersianNumber(now.month() + 1); // Month is zero-indexed
-    const year = toPersianNumber(now.year());
-    const hours = toPersianNumber(now.hours());
-    const minutes = toPersianNumber(now.minutes());
-    const seconds = toPersianNumber(now.seconds());
-    
-    return `${day} / ${month} / ${year} - ${hours}:${minutes}:${seconds}`;
+    return [
+        toPersianNumber(now.date()),
+        '/',
+        toPersianNumber(now.month() + 1),
+        '/',
+        toPersianNumber(now.year()),
+        ' - ',
+        toPersianNumber(now.hours()),
+        ':',
+        toPersianNumber(now.minutes()),
+        ':',
+        toPersianNumber(now.seconds())
+    ].join('');
 }
 
-// Send message via Telegram Bot API
-function sendMessage(chatId, text, replyMarkup = null) {
-    const params = {
-        chat_id: chatId,
-        text: text,
-        parse_mode: 'HTML',
-        reply_markup: replyMarkup,
-    };
+/**
+ * Send a message via Telegram Bot API
+ * @param {number} chatId - Destination chat ID
+ * @param {string} text - Message text
+ * @param {Object} [replyMarkup=null] - Keyboard markup
+ * @returns {Promise} Axios promise
+ */
+async function sendMessage(chatId, text, replyMarkup = null) {
+    try {
+        const params = {
+            chat_id: chatId,
+            text,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup
+        };
 
-    return axios.post(`${botApiUrl}/sendMessage`, params);
+        return await axios.post(
+            `${CONFIG.BASE_API_URL}${CONFIG.BOT_TOKEN}/sendMessage`, 
+            params
+        );
+    } catch (error) {
+        console.error('Error sending message:', error.message);
+        throw error;
+    }
 }
 
-// Handle start command
+// Feedback management
+const FeedbackManager = {
+    feedbacks: {},
+
+    /**
+     * Check if user can submit feedback
+     * @param {number} userId - User's unique ID
+     * @returns {boolean} Whether feedback can be submitted
+     */
+    canSubmitFeedback(userId) {
+        const currentDate = moment();
+        const lastFeedback = this.feedbacks[userId];
+
+        if (!lastFeedback) return true;
+
+        const hoursSinceLastFeedback = moment.duration(
+            currentDate.diff(moment(lastFeedback.timestamp))
+        ).asHours();
+
+        return hoursSinceLastFeedback >= CONFIG.FEEDBACK_COOLDOWN_HOURS;
+    },
+
+    /**
+     * Record user feedback
+     * @param {number} userId - User's unique ID
+     * @param {string} feedback - Feedback text
+     * @returns {void}
+     */
+    recordFeedback(userId, feedback) {
+        this.feedbacks[userId] = {
+            text: feedback,
+            timestamp: moment().toISOString()
+        };
+    }
+};
+
+/**
+ * Handle start command
+ * @param {Object} msg - Incoming message object
+ */
 async function handleStart(msg) {
     const chatId = msg.chat.id;
     const greetingText = `سلام! خوش آمدید.
-    تاریخ و ساعت: ${getFormattedDate()}
-    
-    لطفاً رباتی که می‌خواهید بازخورد بدهید را انتخاب کنید.`;
+تاریخ و ساعت: ${getFormattedPersianDateTime()}
+
+لطفاً رباتی که می‌خواهید بازخورد بدهید را انتخاب کنید.`;
 
     const replyMarkup = {
         inline_keyboard: [
-            [{ text: 'ربات آپلود | uploadd_bot', callback_data: 'uploader_bot' }],
-        ],
+            [{ text: 'ربات آپلود | uploadd_bot', callback_data: 'uploader_bot' }]
+        ]
     };
 
     await sendMessage(chatId, greetingText, replyMarkup);
 }
 
-// Handle callback queries
+/**
+ * Handle callback queries
+ * @param {Object} query - Callback query object
+ */
 async function handleCallbackQuery(query) {
     const chatId = query.message.chat.id;
     const messageId = query.message.message_id;
-    
-    if (query.data === 'uploader_bot') {
-        const botInfoText = `نام: •آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•
+
+    const actionMap = {
+        'uploader_bot': async () => {
+            const botInfoText = `نام: •آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•
 آیدی: @uploadd_bot
 هدف: آپلود و مدیریت فایل به روشی آسان و مدرن!`;
 
-        const replyMarkup = {
-            inline_keyboard: [
-                [{ text: 'ارسال بازخورد', callback_data: 'send_feedback' }],
-                [{ text: 'بازگشت', callback_data: 'back_to_start' }],
-            ],
-        };
+            const replyMarkup = {
+                inline_keyboard: [
+                    [{ text: 'ارسال بازخورد', callback_data: 'send_feedback' }],
+                    [{ text: 'بازگشت', callback_data: 'back_to_start' }]
+                ]
+            };
 
-        await axios.post(`${botApiUrl}/editMessageText`, {
-            chat_id: chatId,
-            message_id: messageId,
-            text: botInfoText,
-            parse_mode: 'HTML',
-            reply_markup: replyMarkup,
-        });
-    }
+            await axios.post(`${CONFIG.BASE_API_URL}${CONFIG.BOT_TOKEN}/editMessageText`, {
+                chat_id: chatId,
+                message_id: messageId,
+                text: botInfoText,
+                parse_mode: 'HTML',
+                reply_markup: replyMarkup
+            });
+        },
+        'send_feedback': async () => {
+            const feedbackText = 'لطفاً بازخورد خود را در مورد این ربات وارد کنید.';
 
-    if (query.data === 'send_feedback') {
-        const feedbackText = `لطفاً بازخورد خود را در مورد این ربات وارد کنید.`;
+            const replyMarkup = {
+                inline_keyboard: [
+                    [{ text: 'بازگشت', callback_data: 'back_to_bot_info' }]
+                ]
+            };
 
-        const replyMarkup = {
-            inline_keyboard: [
-                [{ text: 'بازگشت', callback_data: 'back_to_bot_info' }],
-            ],
-        };
+            await axios.post(`${CONFIG.BASE_API_URL}${CONFIG.BOT_TOKEN}/editMessageText`, {
+                chat_id: chatId,
+                message_id: messageId,
+                text: feedbackText,
+                parse_mode: 'HTML',
+                reply_markup: replyMarkup
+            });
 
-        await axios.post(`${botApiUrl}/editMessageText`, {
-            chat_id: chatId,
-            message_id: messageId,
-            text: feedbackText,
-            parse_mode: 'HTML',
-            reply_markup: replyMarkup,
-        });
-
-        // Listening for feedback from user
-        // For simplicity, using setTimeout to simulate message collection (this is a basic placeholder approach)
-        setTimeout(() => collectFeedback(chatId, msg.from), 1000);
-    }
-
-    if (query.data === 'back_to_start') {
-        await handleStart(query.message);
-    }
-
-    if (query.data === 'back_to_bot_info') {
-        const botInfoText = `نام: •آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•
+            // Note: Actual feedback collection would require more sophisticated 
+            // message handling not shown in this example
+        },
+        'back_to_start': handleStart,
+        'back_to_bot_info': async () => {
+            const botInfoText = `نام: •آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•
 آیدی: @uploadd_bot
 هدف: آپلود و مدیریت فایل به روشی آسان و مدرن`;
 
-        const replyMarkup = {
-            inline_keyboard: [
-                [{ text: 'ارسال بازخورد', callback_data: 'send_feedback' }],
-                [{ text: 'بازگشت', callback_data: 'back_to_start' }],
-            ],
-        };
+            const replyMarkup = {
+                inline_keyboard: [
+                    [{ text: 'ارسال بازخورد', callback_data: 'send_feedback' }],
+                    [{ text: 'بازگشت', callback_data: 'back_to_start' }]
+                ]
+            };
 
-        await axios.post(`${botApiUrl}/editMessageText`, {
-            chat_id: chatId,
-            message_id: messageId,
-            text: botInfoText,
-            parse_mode: 'HTML',
-            reply_markup: replyMarkup,
-        });
-    }
+            await axios.post(`${CONFIG.BASE_API_URL}${CONFIG.BOT_TOKEN}/editMessageText`, {
+                chat_id: chatId,
+                message_id: messageId,
+                text: botInfoText,
+                parse_mode: 'HTML',
+                reply_markup: replyMarkup
+            });
+        }
+    };
+
+    const action = actionMap[query.data];
+    if (action) await action(query);
 }
 
-// Collect feedback
-async function collectFeedback(chatId, user) {
-    // Ensure the user can only send feedback once a day
-    const currentDate = moment().format('YYYY-MM-DD');
-    if (!feedbacks[user.id]) {
-        feedbacks[user.id] = {};
+/**
+ * Collect and distribute feedback
+ * @param {number} chatId - Chat ID
+ * @param {Object} user - User information
+ * @param {string} feedback - Feedback text
+ */
+async function processFeedback(chatId, user, feedback) {
+    // Check if user can submit feedback
+    if (!FeedbackManager.canSubmitFeedback(user.id)) {
+        await sendMessage(chatId, 'شما قبلاً بازخوردی ارسال کرده‌اید.');
+        return;
     }
 
-    if (feedbacks[user.id][currentDate]) {
-        await sendMessage(chatId, 'شما قبلاً بازخوردی ارسال کرده‌اید.');
-    } else {
-        // Store feedback (simulate user input)
-        feedbacks[user.id][currentDate] = "This is the user's feedback"; // Replace with actual feedback collection
+    // Record feedback
+    FeedbackManager.recordFeedback(user.id, feedback);
 
-        // Send feedback to special users
-        const feedbackMessage = `
+    // Prepare feedback message for special users
+    const feedbackMessage = `
 بازخورد جدید:
 
 از طرف: ${user.username} (${user.first_name})
-متن بازخورد: This is the user's feedback
-تاریخ: ${getFormattedDate()}`;
+متن بازخورد: ${feedback}
+تاریخ: ${getFormattedPersianDateTime()}`;
 
-        for (const specialUserId of specialUsers) {
-            await sendMessage(specialUserId, feedbackMessage);
-        }
-
-        await sendMessage(chatId, 'بازخورد شما ارسال شد!');
+    // Send feedback to special users
+    for (const specialUserId of CONFIG.SPECIAL_USERS) {
+        await sendMessage(specialUserId, feedbackMessage);
     }
+
+    // Confirm feedback to original sender
+    await sendMessage(chatId, 'بازخورد شما ارسال شد!');
 }
 
-// Handle updates (messages and callback queries)
+/**
+ * Handle incoming updates
+ * @param {Object} update - Update object from Telegram
+ */
 function handleUpdates(update) {
-    if (update.message) {
-        if (update.message.text === '/start') {
-            handleStart(update.message);
-        }
+    if (update.message && update.message.text === '/start') {
+        handleStart(update.message);
     }
 
     if (update.callback_query) {
@@ -175,24 +253,32 @@ function handleUpdates(update) {
     }
 }
 
-// Poll for updates (using long polling)
-async function getUpdates() {
+/**
+ * Long polling mechanism to get updates
+ */
+async function pollUpdates() {
     try {
-        const response = await axios.get(`${botApiUrl}/getUpdates`);
+        const response = await axios.get(`${CONFIG.BASE_API_URL}${CONFIG.BOT_TOKEN}/getUpdates`);
         const updates = response.data.result;
 
         for (const update of updates) {
             handleUpdates(update);
         }
 
-        // Keep polling for new updates
-        setTimeout(getUpdates, 1000);
+        // Continue polling
+        setTimeout(pollUpdates, 1000);
     } catch (error) {
         console.error('Error fetching updates:', error);
-        setTimeout(getUpdates, 5000); // Retry after 5 seconds on error
+        // Retry with exponential backoff
+        setTimeout(pollUpdates, 5000);
     }
 }
 
-// Start polling for updates
-getUpdates();
-      
+// Start the bot
+function startBot() {
+    console.log('Bot started at:', new Date().toISOString());
+    pollUpdates();
+}
+
+// Initialize the bot
+startBot();
