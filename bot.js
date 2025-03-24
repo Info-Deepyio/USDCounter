@@ -1,16 +1,17 @@
 const axios = require('axios');
 const moment = require('moment-timezone');
+const jalaali = require('jalaali-moment');
 
 // Configuration
-const TOKEN = '1355028807:h4DAqn1oPtnjpnLVyFaqIXISgjNrJH3l497fBs9w';
+const TOKEN = '1355028807:h4DAqn1oPtnjpnLVyFaqIXISgjNrJH3l497fBs9w'; // Replace with your actual bot token
 const BOT_API_URL = `https://tapi.bale.ai/bot${TOKEN}`;
 
-// Special user IDs for feedback
-const SPECIAL_USERS = [1085839779, 844843541];
+// Special user IDs for feedback (add @ symbol)
+const SPECIAL_USERS = [844843541, 1085839779]; // Replace with actual usernames
 
 // Persian numerals mapping
 const PERSIAN_NUMBERS = {
-    '0': '۰', '1': '۱', '2': '۲', '3': '۳', '4': '۴', 
+    '0': '۰', '1': '۱', '2': '۲', '3': '۳', '4': '۴',
     '5': '۵', '6': '۶', '7': '۷', '8': '۸', '9': '۹'
 };
 
@@ -21,13 +22,13 @@ function toPersianNumber(num) {
 
 function getFormattedPersianDate() {
     const now = moment().tz('Asia/Tehran');
-    const day = toPersianNumber(now.format('DD'));
-    const month = toPersianNumber(now.format('MM'));
-    const year = toPersianNumber(now.format('YYYY'));
+    const gregorianDate = now.format('YYYY/MM/DD');
+    const jalaliDate = jalaali(now, 'YYYY/MM/DD').format('jYYYY/jMM/jDD');
     const time = toPersianNumber(now.format('HH:mm:ss'));
-    
-    return `${day}/${month}/${year} - ${time}`;
+
+    return `میلادی: ${gregorianDate} \nجلالی: ${jalaliDate} \nساعت: ${time}`;
 }
+
 
 // User feedback tracking
 const USER_FEEDBACKS = {};
@@ -94,10 +95,13 @@ class TelegramBot {
         const chatId = message.chat.id;
         const userId = message.from.id;
         const feedbackText = message.text;
+        const username = message.from.username ? `@${message.from.username}` : 'بدون نام کاربری';
+        const firstName = message.from.first_name || 'بدون نام';
+
 
         // Validate feedback length
         if (!feedbackText || feedbackText.length < 10) {
-            await sendPersianMessage(chatId, '❌ بازخورد باید حداقل ۱۰ کاراکتر داشته باشد.');
+            await sendPersianMessage(chatId, '❌ بازخورد باید حداقل ۱۰ کارکتر داشته باشد.');
             return;
         }
 
@@ -112,22 +116,29 @@ class TelegramBot {
         USER_FEEDBACKS[userId] = {
             text: feedbackText,
             timestamp: Date.now(),
-            username: message.from.username || 'بدون نام کاربری',
-            firstName: message.from.first_name || 'بدون نام'
+            username: username,
+            firstName: firstName
         };
 
         // Prepare and send feedback to special users
         const feedbackMessage = `
+\`\`\`
 ✨ بازخورد جدید:
 
 👤 کاربر: ${USER_FEEDBACKS[userId].username} (${USER_FEEDBACKS[userId].firstName})
 🆔 شناسه کاربری: ${userId}
 📝 متن بازخورد: ${feedbackText}
-📅 تاریخ: ${getFormattedPersianDate()}`;
+📅 تاریخ: ${getFormattedPersianDate()}
+\`\`\``;
+
 
         // Send to special users
         for (const specialUserId of SPECIAL_USERS) {
-            await sendPersianMessage(specialUserId, feedbackMessage);
+          try {
+             await sendPersianMessage(specialUserId, feedbackMessage);
+          } catch (error){
+            log(`Error sending to special user ${specialUserId}: ${error}`);
+          }
         }
 
         // Confirm to original user
@@ -152,7 +163,7 @@ class TelegramBot {
     async handleCallbackQuery(callbackQuery) {
         const chatId = callbackQuery.message.chat.id;
         const messageId = callbackQuery.message.message_id;
-        
+
         switch (callbackQuery.data) {
             case 'uploader_bot':
                 const botInfoText = `💬 نام: •آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•
