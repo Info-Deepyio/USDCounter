@@ -1,5 +1,5 @@
 const axios = require('axios');
-const moment = require('moment');
+const moment = require('moment-timezone');
 
 // Your Telegram Bot Token here
 const token = '1355028807:h4DAqn1oPtnjpnLVyFaqIXISgjNrJH3l497fBs9w';
@@ -13,12 +13,14 @@ const feedbacks = {}; // To store feedbacks and manage user daily limits
 const PersianNumbers = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
 
 function toPersianNumber(number) {
-    return number.toString().split('').map(char => PersianNumbers[parseInt(char)]).join('');
+    return number.toString().split('').map(char => PersianNumbers[parseInt(char)] || char).join('');
 }
 
-// Get formatted date and time in Persian
+// Get formatted date and time in Persian with Tehran timezone
 function getFormattedDate() {
-    const now = moment();
+    // Use Tehran timezone
+    const now = moment().tz('Asia/Tehran');
+    
     const day = toPersianNumber(now.date());
     const month = toPersianNumber(now.month() + 1); // Month is zero-indexed
     const year = toPersianNumber(now.year());
@@ -30,7 +32,7 @@ function getFormattedDate() {
 }
 
 // Send message via Telegram Bot API
-function sendMessage(chatId, text, replyMarkup = null) {
+async function sendMessage(chatId, text, replyMarkup = null) {
     const params = {
         chat_id: chatId,
         text: text,
@@ -38,7 +40,11 @@ function sendMessage(chatId, text, replyMarkup = null) {
         reply_markup: replyMarkup,
     };
 
-    return axios.post(`${botApiUrl}/sendMessage`, params);
+    try {
+        return await axios.post(`${botApiUrl}/sendMessage`, params);
+    } catch (error) {
+        console.error('Error sending message:', error.response ? error.response.data : error.message);
+    }
 }
 
 // Handle start command
@@ -62,6 +68,7 @@ async function handleStart(msg) {
 async function handleCallbackQuery(query) {
     const chatId = query.message.chat.id;
     const messageId = query.message.message_id;
+    const user = query.from;
     
     if (query.data === 'uploader_bot') {
         const botInfoText = `💬 نام: •آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•
@@ -102,7 +109,7 @@ async function handleCallbackQuery(query) {
         });
 
         // Collect feedback from user
-        await collectFeedback(chatId, query.from);
+        await startFeedbackCollection(chatId, user);
     }
 
     if (query.data === 'back_to_start') {
@@ -131,35 +138,71 @@ async function handleCallbackQuery(query) {
     }
 }
 
-// Collect feedback
-async function collectFeedback(chatId, user) {
-    const currentDate = moment().format('YYYY-MM-DD');
+// Start feedback collection process
+async function startFeedbackCollection(chatId, user) {
+    const currentDate = moment().tz('Asia/Tehran').format('YYYY-MM-DD');
 
+    // Initialize user feedback tracking if not exists
     if (!feedbacks[user.id]) {
         feedbacks[user.id] = {};
     }
 
-    // If the user has already submitted feedback today, do not send it again
+    // Check if user has already submitted feedback today
     if (feedbacks[user.id][currentDate]) {
-        await sendMessage(chatId, '❗️ شما قبلاً بازخوردی ارسال کرده‌اید.');
+        const remainingTime = moment(feedbacks[user.id][currentDate].nextAllowedTime).fromNow();
+        await sendMessage(chatId, `❗️ شما قبلاً بازخورد ارسال کرده‌اید. لطفاً ${remainingTime} مجدداً تلاش کنید.`);
         return;
     }
 
-    // Collect feedback
-    feedbacks[user.id][currentDate] = "This is the user's feedback"; // Replace with actual user input collection
+    // Send instruction to send feedback
+    await sendMessage(chatId, '📝 لطفاً بازخورد خود را در یک پیام ارسال کنید.');
+}
 
+// Process incoming feedback
+async function processFeedback(msg) {
+    const chatId = msg.chat.id;
+    const user = msg.from;
+    const feedbackText = msg.text;
+
+    // Validate feedback
+    if (!feedbackText || feedbackText.length < 10) {
+        await sendMessage(chatId, '❌ بازخورد باید حداقل ۱۰ کاراکتر داشته باشد.');
+        return;
+    }
+
+    const currentDate = moment().tz('Asia/Tehran').format('YYYY-MM-DD');
+
+    // Initialize user feedback tracking if not exists
+    if (!feedbacks[user.id]) {
+        feedbacks[user.id] = {};
+    }
+
+    // Set cooldown for 24 hours
+    const nextAllowedTime = moment().tz('Asia/Tehran').add(1, 'day');
+    
+    // Store feedback details
+    feedbacks[user.id][currentDate] = {
+        text: feedbackText,
+        timestamp: moment().tz('Asia/Tehran').toISOString(),
+        nextAllowedTime: nextAllowedTime.toISOString()
+    };
+
+    // Prepare feedback message
     const feedbackMessage = `
 ✨ بازخورد جدید:
 
-👤 از طرف: ${user.username} (${user.first_name})
-📝 متن بازخورد: This is the user's feedback
+👤 از طرف: ${user.username || 'بدون نام کاربری'} (${user.first_name || 'بدون نام'})
+👤 شناسه کاربری: ${user.id}
+📝 متن بازخورد: ${feedbackText}
 📅 تاریخ: ${getFormattedDate()}`;
 
+    // Send feedback to special users
     for (const specialUserId of specialUsers) {
         await sendMessage(specialUserId, feedbackMessage);
     }
 
-    await sendMessage(chatId, '✅ بازخورد شما ارسال شد!');
+    // Confirm feedback submission to user
+    await sendMessage(chatId, '✅ بازخورد شما با موفقیت ارسال شد!\n⏳ شما می‌توانید پس از ۲۴ ساعت مجدداً بازخورد ارسال کنید.');
 }
 
 // Handle updates (messages and callback queries)
@@ -167,6 +210,9 @@ function handleUpdates(update) {
     if (update.message) {
         if (update.message.text === '/start') {
             handleStart(update.message);
+        } else {
+            // Process any text message as potential feedback
+            processFeedback(update.message);
         }
     }
 
@@ -176,20 +222,34 @@ function handleUpdates(update) {
 }
 
 // Poll for updates (using long polling)
-async function getUpdates() {
+async function getUpdates(offset = 0) {
     try {
-        const response = await axios.get(`${botApiUrl}/getUpdates`);
+        const response = await axios.get(`${botApiUrl}/getUpdates`, {
+            params: {
+                offset: offset,
+                timeout: 30
+            }
+        });
+
         const updates = response.data.result;
 
-        for (const update of updates) {
-            handleUpdates(update);
+        if (updates.length > 0) {
+            // Process each update
+            for (const update of updates) {
+                handleUpdates(update);
+                
+                // Update offset to acknowledge processed updates
+                offset = update.update_id + 1;
+            }
         }
 
-        // Keep polling for new updates with a 1-second delay to avoid spam
-        setTimeout(getUpdates, 1000);
+        // Continue polling with updated offset
+        getUpdates(offset);
     } catch (error) {
         console.error('⚠️ Error fetching updates:', error);
-        setTimeout(getUpdates, 5000); // Retry after 5 seconds on error
+        
+        // Wait and retry
+        setTimeout(() => getUpdates(offset), 5000);
     }
 }
 
