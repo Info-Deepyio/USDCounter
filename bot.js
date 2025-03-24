@@ -1,27 +1,13 @@
 const axios = require('axios');
-const moment = require('moment');
+const moment = require('moment-timezone');
 
 // Configuration
 const config = {
   token: '1355028807:h4DAqn1oPtnjpnLVyFaqIXISgjNrJH3l497fBs9w',
-  specialUsers: [1085839779, 844843541], // Replace with your special user IDs
+  specialUsers: [1085839779, 844843541],
   maxFeedbackPerDay: 1,
-  botApiUrl: 'https://tapi.bale.ai/bot'
-};
-
-// Emoji constants
-const EMOJI = {
-  WAVE: '👋',
-  CALENDAR: '📅',
-  ROBOT: '🤖',
-  BACK: '🔙',
-  FEEDBACK: '📝',
-  SUCCESS: '✅',
-  WARNING: '⚠️',
-  CLOCK: '⏱️',
-  UPLOAD: '📤',
-  THANKS: '🙏',
-  INFO: 'ℹ️'
+  botApiUrl: 'https://tapi.bale.ai/bot',
+  timezone: 'Asia/Tehran'
 };
 
 // Persian numerals
@@ -35,284 +21,192 @@ const state = {
 
 /**
  * Convert numbers to Persian numerals
- * @param {number} number 
- * @returns {string}
  */
-function toPersianNumber(number) {
-  return number.toString().split('').map(char => PERSIAN_NUMBERS[parseInt(char)]).join('');
+function toPersianNumber(num) {
+  return num.toString().replace(/\d/g, d => PERSIAN_NUMBERS[parseInt(d)]);
 }
 
 /**
- * Get formatted Persian date and time
- * @returns {string}
+ * Get formatted Persian date and time in Tehran timezone
  */
 function getFormattedDate() {
-  const now = moment();
-  return [
-    `${toPersianNumber(now.date())} / ${toPersianNumber(now.month() + 1)} / ${toPersianNumber(now.year())}`,
-    `${toPersianNumber(now.hours())}:${toPersianNumber(now.minutes())}:${toPersianNumber(now.seconds())}`
-  ].join(' - ');
+  const now = moment().tz(config.timezone);
+  const date = now.locale('fa').format('D MMMM YYYY');
+  const time = now.format('HH:mm:ss');
+  return `${toPersianNumber(date)} - ${toPersianNumber(time)}`;
 }
 
 /**
- * Send message with better error handling
- * @param {number} chatId 
- * @param {string} text 
- * @param {object} replyMarkup 
- * @returns {Promise}
+ * Send message via Telegram Bot API
  */
 async function sendMessage(chatId, text, replyMarkup = null) {
   try {
-    const params = {
+    await axios.post(`${config.botApiUrl}${config.token}/sendMessage`, {
       chat_id: chatId,
       text: text,
       parse_mode: 'HTML',
-      reply_markup: replyMarkup,
-    };
-    
-    return await axios.post(`${config.botApiUrl}${config.token}/sendMessage`, params);
+      reply_markup: replyMarkup
+    });
   } catch (error) {
     console.error('Error sending message:', error.message);
-    return null;
   }
 }
 
 /**
- * Handle /start command
- * @param {object} msg 
+ * Handle start command
  */
 async function handleStart(msg) {
   const chatId = msg.chat.id;
-  const greetingText = [
-    `${EMOJI.WAVE} <b>سلام! به ربات بازخورد خوش آمدید!</b>`,
-    '',
-    `${EMOJI.CALENDAR} <i>تاریخ و ساعت:</i> <code>${getFormattedDate()}</code>`,
-    '',
-    'لطفاً رباتی که می‌خواهید بازخورد بدهید را انتخاب کنید:'
-  ].join('\n');
-
+  const text = `سلام! به ربات بازخورد خوش آمدید.\nتاریخ و ساعت: ${getFormattedDate()}\n\nلطفاً ربات مورد نظر را انتخاب کنید:`;
+  
   const replyMarkup = {
     inline_keyboard: [
-      [{ 
-        text: `${EMOJI.UPLOAD} ربات آپلود | uploadd_bot`, 
-        callback_data: 'uploader_bot' 
-      }],
-    ],
+      [{ text: `ربات آپلود ${toPersianNumber('@uploadd_bot')}`, callback_data: 'uploader_bot' }]
+    ]
   };
 
-  await sendMessage(chatId, greetingText, replyMarkup);
-}
-
-/**
- * Handle callback queries
- * @param {object} query 
- */
-async function handleCallbackQuery(query) {
-  const chatId = query.message.chat.id;
-  const messageId = query.message.message_id;
-  
-  try {
-    switch(query.data) {
-      case 'uploader_bot':
-        await showBotInfo(chatId, messageId);
-        break;
-        
-      case 'send_feedback':
-        await requestFeedback(chatId, messageId);
-        break;
-        
-      case 'back_to_start':
-        case 'back_to_bot_info':
-        await handleStart(query.message);
-        break;
-    }
-  } catch (error) {
-    console.error('Error handling callback:', error);
-    await sendMessage(chatId, `${EMOJI.WARNING} خطایی رخ داده است. لطفاً دوباره امتحان کنید.`);
-  }
+  await sendMessage(chatId, text, replyMarkup);
 }
 
 /**
  * Show bot information
- * @param {number} chatId 
- * @param {number} messageId 
  */
 async function showBotInfo(chatId, messageId) {
-  const botInfoText = [
-    `${EMOJI.ROBOT} <b>•آ‌پــلــودر | 𝙪𝙥𝙡𝙤𝙖𝙙𝙚𝙧•</b>`,
-    '',
-    `${EMOJI.INFO} <i>آیدی:</i> @uploadd_bot`,
-    `${EMOJI.INFO} <i>هدف:</i> آپلود و مدیریت فایل به روشی آسان و مدرن!`
-  ].join('\n');
-
+  const text = `نام: آپلودر | uploader\nآیدی: ${toPersianNumber('@uploadd_bot')}\nهدف: آپلود و مدیریت فایل`;
+  
   const replyMarkup = {
     inline_keyboard: [
-      [{ 
-        text: `${EMOJI.FEEDBACK} ارسال بازخورد`, 
-        callback_data: 'send_feedback' 
-      }],
-      [{ 
-        text: `${EMOJI.BACK} بازگشت`, 
-        callback_data: 'back_to_start' 
-      }],
-    ],
+      [{ text: 'ارسال بازخورد', callback_data: 'send_feedback' }],
+      [{ text: 'بازگشت', callback_data: 'back_to_start' }]
+    ]
   };
 
-  await axios.post(`${config.botApiUrl}${config.token}/editMessageText`, {
-    chat_id: chatId,
-    message_id: messageId,
-    text: botInfoText,
-    parse_mode: 'HTML',
-    reply_markup: replyMarkup,
-  });
+  try {
+    await axios.post(`${config.botApiUrl}${config.token}/editMessageText`, {
+      chat_id: chatId,
+      message_id: messageId,
+      text: text,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup
+    });
+  } catch (error) {
+    console.error('Error editing message:', error.message);
+  }
 }
 
 /**
  * Request feedback from user
- * @param {number} chatId 
- * @param {number} messageId 
  */
 async function requestFeedback(chatId, messageId) {
-  const feedbackText = [
-    `${EMOJI.FEEDBACK} <b>ارسال بازخورد</b>`,
-    '',
-    'لطفاً نظر، پیشنهاد یا انتقاد خود را درباره این ربات ارسال کنید:'
-  ].join('\n');
-
+  const text = 'لطفاً بازخورد خود را ارسال کنید:';
+  
   const replyMarkup = {
     inline_keyboard: [
-      [{ 
-        text: `${EMOJI.BACK} بازگشت`, 
-        callback_data: 'back_to_bot_info' 
-      }],
-    ],
+      [{ text: 'بازگشت', callback_data: 'back_to_bot_info' }]
+    ]
   };
 
-  await axios.post(`${config.botApiUrl}${config.token}/editMessageText`, {
-    chat_id: chatId,
-    message_id: messageId,
-    text: feedbackText,
-    parse_mode: 'HTML',
-    reply_markup: replyMarkup,
-  });
-
-  // Set state to expect feedback
-  state.expectingFeedback = chatId;
+  try {
+    await axios.post(`${config.botApiUrl}${config.token}/editMessageText`, {
+      chat_id: chatId,
+      message_id: messageId,
+      text: text,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup
+    });
+    state.expectingFeedback = chatId;
+  } catch (error) {
+    console.error('Error requesting feedback:', error.message);
+  }
 }
 
 /**
- * Process incoming feedback
- * @param {object} msg 
+ * Process feedback with proper cooldown
  */
 async function processFeedback(msg) {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
-  const currentDate = moment().format('YYYY-MM-DD');
-  
-  // Initialize user feedback if not exists
+  const currentDate = moment().tz(config.timezone).format('YYYY-MM-DD');
+
   if (!state.feedbacks[userId]) {
     state.feedbacks[userId] = {};
   }
-  
-  // Check daily limit
-  if (state.feedbacks[userId][currentDate] >= config.maxFeedbackPerDay) {
-    await sendMessage(chatId, [
-      `${EMOJI.WARNING} <b>شما امروز بازخورد ارسال کرده‌اید!</b>`,
-      '',
-      `می‌توانید فردا مجدداً بازخورد ارسال کنید. ${EMOJI.THANKS}`
-    ].join('\n'));
+
+  if (state.feedbacks[userId].date === currentDate && 
+      state.feedbacks[userId].count >= config.maxFeedbackPerDay) {
+    await sendMessage(chatId, 'شما امروز بازخورد ارسال کرده‌اید. لطفاً فردا مجدداً تلاش کنید.');
     return;
   }
-  
-  // Store feedback
-  state.feedbacks[userId][currentDate] = (state.feedbacks[userId][currentDate] || 0) + 1;
-  
-  // Prepare feedback message for admins
-  const feedbackMessage = [
-    `${EMOJI.FEEDBACK} <b>بازخورد جدید دریافت شد!</b>`,
-    '',
-    `${EMOJI.INFO} <i>از کاربر:</i> ${msg.from.first_name} (@${msg.from.username || 'N/A'})`,
-    `${EMOJI.CLOCK} <i>زمان:</i> <code>${getFormattedDate()}</code>`,
-    '',
-    `<b>متن بازخورد:</b>`,
-    `<code>${msg.text}</code>`
-  ].join('\n');
-  
-  // Send to special users
-  for (const specialUserId of config.specialUsers) {
-    await sendMessage(specialUserId, feedbackMessage);
+
+  state.feedbacks[userId] = {
+    date: currentDate,
+    count: (state.feedbacks[userId].count || 0) + 1
+  };
+
+  const feedbackText = `بازخورد جدید از ${msg.from.first_name} (${toPersianNumber(userId)}):\n${msg.text}\n\nتاریخ: ${getFormattedDate()}`;
+
+  for (const adminId of config.specialUsers) {
+    await sendMessage(adminId, feedbackText);
   }
-  
-  // Confirm to user
-  await sendMessage(chatId, [
-    `${EMOJI.SUCCESS} <b>بازخورد شما با موفقیت ثبت شد!</b>`,
-    '',
-    `از مشارکت شما سپاسگزاریم. ${EMOJI.THANKS}`
-  ].join('\n'));
-  
-  // Reset feedback state
-  delete state.expectingFeedback;
+
+  await sendMessage(chatId, 'بازخورد شما با موفقیت ثبت شد.');
+  state.expectingFeedback = null;
 }
 
 /**
- * Handle incoming updates
- * @param {object} update 
+ * Handle updates
  */
 async function handleUpdate(update) {
-  try {
-    // Process callback queries
-    if (update.callback_query) {
-      await handleCallbackQuery(update.callback_query);
-      return;
-    }
+  if (update.callback_query) {
+    const { data, message } = update.callback_query;
     
-    // Process messages
-    if (update.message) {
-      // Handle /start command
-      if (update.message.text === '/start') {
-        await handleStart(update.message);
-        return;
-      }
-      
-      // Handle feedback if expecting
-      if (state.expectingFeedback === update.message.chat.id) {
-        await processFeedback(update.message);
-        return;
-      }
+    if (data === 'uploader_bot') {
+      await showBotInfo(message.chat.id, message.message_id);
+    } 
+    else if (data === 'send_feedback') {
+      await requestFeedback(message.chat.id, message.message_id);
     }
-  } catch (error) {
-    console.error('Error processing update:', error);
+    else if (data === 'back_to_start') {
+      await handleStart(message);
+    }
+    else if (data === 'back_to_bot_info') {
+      await showBotInfo(message.chat.id, message.message_id);
+    }
+  }
+  else if (update.message) {
+    if (update.message.text === '/start') {
+      await handleStart(update.message);
+    }
+    else if (state.expectingFeedback === update.message.chat.id) {
+      await processFeedback(update.message);
+    }
   }
 }
 
 /**
- * Poll for updates with long polling
+ * Poll for updates
  */
 async function pollUpdates() {
   try {
-    const response = await axios.get(`${config.botApiUrl}${config.token}/getUpdates`, {
+    const { data } = await axios.get(`${config.botApiUrl}${config.token}/getUpdates`, {
       params: {
         offset: state.lastUpdateId + 1,
-        timeout: 30  // Long polling timeout
+        timeout: 30
       }
     });
-    
-    if (response.data.result && response.data.result.length > 0) {
-      for (const update of response.data.result) {
+
+    if (data.result && data.result.length) {
+      for (const update of data.result) {
         state.lastUpdateId = Math.max(state.lastUpdateId, update.update_id);
         await handleUpdate(update);
       }
     }
-    
-    // Immediately poll again
-    setImmediate(pollUpdates);
   } catch (error) {
     console.error('Polling error:', error.message);
-    // Retry after 1 second on error
-    setTimeout(pollUpdates, 1000);
+  } finally {
+    setTimeout(pollUpdates, 100);
   }
 }
 
 // Start the bot
-console.log('🤖 Bot is running...');
 pollUpdates();
